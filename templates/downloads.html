@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="mobile-panel">
+  <div class="page-title-row">
+    <div><h1>下载</h1><p>支持暂停/恢复/删除任务</p></div>
+    <button class="round-btn" onclick="loadDownloadsPage()">↻</button>
+  </div>
+
+  <h2 class="section-title">任务</h2>
+  <div id="downloadTaskList" class="download-list"></div>
+
+  <h2 class="section-title">已下载</h2>
+  <div id="downloadFileList" class="download-list"></div>
+</section>
+{% endblock %}
+{% block scripts %}<script>initDownloadsPage();</script>{% endblock %}

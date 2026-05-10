@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="chat-page" data-peer="{{ peer }}">
+  <div class="chat-header">
+    <button class="back-btn" onclick="location.href='/chats'">‹</button>
+    <div>
+      <div class="chat-title">{{ peer }}</div>
+      <div class="chat-peer">{{ peer }}</div>
+    </div>
+    <button class="round-btn" onclick="loadMessages()">↻</button>
+  </div>
+
+  <div id="messageList" class="message-list"></div>
+
+  <div class="composer-mini">
+    <button onclick="toggleComposer('textComposer')">文字</button>
+    <button onclick="toggleComposer('fileComposer')">媒体/文件</button>
+    <button class="gray" onclick="loadOlderMessages()">更早</button>
+  </div>
+
+  <div id="textComposer" class="composer-panel">
+    <textarea id="messageInput" placeholder="输入消息（支持 Markdown）"></textarea>
+    <button onclick="sendText()">发送消息</button>
+  </div>
+
+  <div id="fileComposer" class="composer-panel">
+    <input id="sendFileInput" type="file">
+    <input id="captionInput" placeholder="说明文字，可选">
+    <button class="green" onclick="sendFile()">发送媒体/文件</button>
+  </div>
+</section>
+
+<div id="mediaViewer" class="media-viewer">
+  <div class="viewer-top">
+    <div><b id="viewerTitle">媒体</b><span id="viewerIndex">1 / 1</span></div>
+    <div class="viewer-right">
+      <button id="viewerDownload" class="viewer-btn">⬇</button>
+      <button id="viewerClose" class="viewer-btn">✕</button>
+    </div>
+  </div>
+  <button id="viewerPrev" class="viewer-nav left">‹</button>
+  <div id="viewerBody" class="viewer-body"></div>
+  <button id="viewerNext" class="viewer-nav right">›</button>
+</div>
+{% endblock %}
+{% block scripts %}<script>initSingleChatPage("{{ peer }}");</script>{% endblock %}

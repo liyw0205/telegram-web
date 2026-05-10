@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block content %}
+
+<section class="card">
+  <h2>配置</h2>
+
+  <label>api_id</label>
+  <input id="cfg_api_id" inputmode="numeric">
+
+  <label>api_hash</label>
+  <input id="cfg_api_hash">
+
+  <label>手机号</label>
+  <input id="cfg_phone">
+
+  <label>SOCKS5 代理</label>
+  <input id="cfg_proxy" placeholder="socks5://127.0.0.1:7890">
+
+  <label>会话类型</label>
+  <select id="cfg_session_type">
+    <option value="file">file</option>
+    <option value="string">string</option>
+  </select>
+
+  <label>session_file</label>
+  <input id="cfg_session_file">
+
+  <label>string_session</label>
+  <textarea id="cfg_string_session"></textarea>
+
+  <button onclick="saveConfigPage()">保存配置</button>
+</section>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+loadConfigPage();
+</script>
+{% endblock %}

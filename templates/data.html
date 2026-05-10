@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block content %}
+
+<section class="card">
+  <h2>账号数据</h2>
+
+  <button onclick="exportStringSession()">导出 StringSession</button>
+
+  <label>导出的 StringSession</label>
+  <textarea id="exportedStringSession" readonly placeholder="点击上方按钮导出"></textarea>
+</section>
+
+<section class="card">
+  <h2>当前配置摘要</h2>
+
+  <div class="info-row">
+    <span>api_id</span>
+    <b>{{ cfg.api_id }}</b>
+  </div>
+
+  <div class="info-row">
+    <span>phone</span>
+    <b>{{ cfg.phone }}</b>
+  </div>
+
+  <div class="info-row">
+    <span>proxy</span>
+    <b>{{ cfg.proxy }}</b>
+  </div>
+
+  <div class="info-row">
+    <span>session_type</span>
+    <b>{{ cfg.session_type }}</b>
+  </div>
+</section>
+
+<section class="card">
+  <h2>data 目录文件</h2>
+
+  {% for f in data_files %}
+  <div class="file-card">
+    <div>
+      <div class="file-name">{{ f.name }}</div>
+      <div class="file-meta">{{ f.size }} bytes</div>
+    </div>
+  </div>
+  {% else %}
+  <div class="empty">data 目录暂无文件</div>
+  {% endfor %}
+</section>
+
+{% endblock %}
