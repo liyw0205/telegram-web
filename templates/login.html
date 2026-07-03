@@ -14,8 +14,10 @@
   <label>SOCKS5 代理</label><input id="proxy" placeholder="socks5://127.0.0.1:7890">
   <label>下载线程</label><input id="download_threads" type="number" min="1" max="128" value="16">
   <label>缓存上限(MB)</label><input id="cache_limit_mb" type="number" min="128" max="10240" value="1024">
+  <label>Web Token</label><input id="web_token" type="password" autocomplete="new-password" placeholder="可选，保存后访问需要 Token">
 
   <div class="action-grid">
+    <button class="gray" onclick="saveLoginConfig()">保存配置</button>
     <button onclick="startLogin()">发送验证码</button>
     <button class="green" onclick="submitCode()">提交验证码</button>
     <button class="yellow" onclick="submitPassword()">提交 2FA</button>

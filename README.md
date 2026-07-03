@@ -45,6 +45,14 @@ http://127.0.0.1:5000
 TELEGRAM_WEB_HOST=0.0.0.0 TELEGRAM_WEB_PORT=5000 python app.py
 ```
 
+对外监听必须同时设置 Web Token，否则服务会拒绝启动：
+
+```bash
+TELEGRAM_WEB_HOST=0.0.0.0 TELEGRAM_WEB_TOKEN=your-strong-token python app.py
+```
+
+也可以先在本机打开 `/login`，保存 `Web Token` 后再对外监听。设置 Token 后，页面、API、媒体缓存和下载文件都会要求通过 `/auth` 验证。
+
 ## 配置
 
 登录页需要填写：
@@ -77,6 +85,7 @@ TELEGRAM_WEB_HOST=0.0.0.0 TELEGRAM_WEB_PORT=5000 python app.py
 - 媒体缓存会按上限自动清理
 - `data/`、`Download/`、`Pictures/` 和 `.session` 文件是本地运行数据，不要提交到 Git
 - 当前登录页开放手机号登录、验证码和 2FA；StringSession / `.session` 可通过配置字段使用，独立导入导出页面尚未启用
+- 对外开放前必须设置强 Web Token，并只在可信网络中使用
 
 ## 说明
 

@@ -1,7 +1,5 @@
 # Phase 2 -> Phase 3 交接
 
-最新交接文件：`docs/handoff/2026-07-04-phase-2-to-phase-3.md`
-
 ## 当前完成进度
 
 - 已增加 Web Token 访问控制，覆盖页面、API、文件路由、媒体缓存和 Socket.IO。

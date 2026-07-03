@@ -2,6 +2,8 @@ import asyncio
 import json
 import mimetypes
 import os
+import re
+import secrets
 import shutil
 import threading
 import time
@@ -11,7 +13,7 @@ from pathlib import Path
 from urllib.parse import urlparse, unquote, quote
 
 import socks
-from flask import Flask, request, jsonify, render_template, redirect, send_from_directory, Response, abort
+from flask import Flask, request, jsonify, render_template, redirect, send_from_directory, Response, abort, make_response
 from flask_socketio import SocketIO
 from telethon import TelegramClient, events
 from telethon.errors import SessionPasswordNeededError
@@ -40,12 +42,15 @@ DEFAULT_CONFIG = {
     "string_session": "",
     "download_threads": 16,
     "cache_limit_mb": 1024,
+    "web_token": "",
 }
-CONFIG_FIELDS = ["api_id", "api_hash", "phone", "proxy", "session_type", "session_file", "string_session", "download_threads", "cache_limit_mb"]
+CONFIG_FIELDS = ["api_id", "api_hash", "phone", "proxy", "session_type", "session_file", "string_session", "download_threads", "cache_limit_mb", "web_token"]
+SECRET_CONFIG_FIELDS = ["api_hash", "session_file", "string_session", "web_token"]
+AUTH_COOKIE = "telegram_web_token"
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "web-telegram-flask"
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
+socketio = SocketIO(app, async_mode="threading")
 
 
 class ApiError(ValueError):
@@ -64,8 +69,11 @@ def load_config():
         data = {}
     cfg = dict(DEFAULT_CONFIG)
     cfg.update(data)
-    cfg["download_threads"] = max(1, min(128, int(cfg.get("download_threads") or 16)))
-    cfg["cache_limit_mb"] = max(128, min(10240, int(cfg.get("cache_limit_mb") or 1024)))
+    cfg["download_threads"] = coerce_int_range(cfg.get("download_threads"), 16, 1, 128, "download_threads", strict=False)
+    cfg["cache_limit_mb"] = coerce_int_range(cfg.get("cache_limit_mb"), 1024, 128, 10240, "cache_limit_mb", strict=False)
+    cfg["api_id"] = coerce_int_range(cfg.get("api_id"), 0, 0, 2**31 - 1, "api_id", strict=False)
+    if cfg.get("session_type") not in ("file", "string"):
+        cfg["session_type"] = "file"
     return cfg
 
 
@@ -98,8 +106,29 @@ def parse_proxy(proxy_url):
     scheme = u.scheme.lower()
     if scheme not in ("socks5", "socks4"):
         raise ValueError("仅支持 socks4/socks5")
+    if not u.hostname:
+        raise ValueError("代理地址缺少 host")
+    if u.path not in ("", "/") or u.query or u.fragment:
+        raise ValueError("代理地址不能包含 path/query/fragment")
+    port = int(u.port or 1080)
+    if port < 1 or port > 65535:
+        raise ValueError("代理端口必须在 1..65535 之间")
     proxy_type = socks.SOCKS5 if scheme == "socks5" else socks.SOCKS4
-    return (proxy_type, u.hostname, int(u.port or 1080), True, unquote(u.username) if u.username else None, unquote(u.password) if u.password else None)
+    return (proxy_type, u.hostname, port, True, unquote(u.username) if u.username else None, unquote(u.password) if u.password else None)
+
+
+def coerce_int_range(value, default, min_value, max_value, field, strict=True):
+    try:
+        number = int(value)
+    except Exception:
+        if strict:
+            raise ApiError(f"{field} 必须是数字")
+        number = int(default)
+    if number < min_value or number > max_value:
+        if strict:
+            raise ApiError(f"{field} 必须在 {min_value}..{max_value} 之间")
+        number = int(default)
+    return number
 
 
 def request_json_object():
@@ -118,13 +147,150 @@ def request_json_object():
 
 def public_config(cfg):
     data = dict(cfg)
-    data["api_hash_saved"] = bool(data.get("api_hash"))
-    data["session_file_saved"] = bool(data.get("session_file"))
-    data["string_session_saved"] = bool(data.get("string_session"))
-    data["api_hash"] = ""
-    data["session_file"] = ""
-    data["string_session"] = ""
+    for field in SECRET_CONFIG_FIELDS:
+        data[f"{field}_saved"] = bool(data.get(field))
+        data[field] = ""
+    data["proxy_saved"] = bool(data.get("proxy"))
+    data["proxy_redacted"] = proxy_has_credentials(data.get("proxy", ""))
+    data["proxy"] = public_proxy(data.get("proxy", ""))
     return data
+
+
+def proxy_has_credentials(proxy_url):
+    try:
+        parsed = urlparse(str(proxy_url or "").strip())
+    except Exception:
+        return False
+    return bool(parsed.username or parsed.password)
+
+
+def public_proxy(proxy_url):
+    proxy_url = str(proxy_url or "").strip()
+    if not proxy_url:
+        return ""
+    try:
+        parsed = urlparse(proxy_url)
+    except Exception:
+        return ""
+    if parsed.username or parsed.password:
+        return ""
+    return proxy_url
+
+
+def normalize_session_file(value):
+    raw = str(value or "").strip()
+    if not raw:
+        return str(DATA_DIR / "telegram")
+    path = Path(raw)
+    if path.is_absolute() or path.name != raw or ".." in path.parts:
+        raise ApiError("session_file 只能是 data 目录内的文件名")
+    if path.suffix and path.suffix != ".session":
+        raise ApiError("session_file 仅支持 .session 后缀")
+    name = safe_filename(path.stem if path.suffix == ".session" else path.name)
+    if name in ("", ".", ".."):
+        raise ApiError("session_file 文件名无效")
+    return str((DATA_DIR / name).resolve())
+
+
+def normalize_web_token(value):
+    token = str(value or "").strip()
+    if not token:
+        return ""
+    if len(token) < 8 or len(token) > 256:
+        raise ApiError("web_token 长度必须在 8..256 之间")
+    if any(ch.isspace() for ch in token):
+        raise ApiError("web_token 不能包含空白字符")
+    return token
+
+
+def normalize_api_hash(value):
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    if not re.fullmatch(r"[0-9a-fA-F]{32}", text):
+        raise ApiError("api_hash 必须是 32 位十六进制字符串")
+    return text.lower()
+
+
+def normalize_phone(value):
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    if not re.fullmatch(r"\+?[0-9]{5,20}", text):
+        raise ApiError("phone 格式无效")
+    return text
+
+
+def normalize_string_session(value):
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    try:
+        StringSession(text)
+    except Exception:
+        raise ApiError("string_session 格式无效")
+    return text
+
+
+def normalize_proxy_url(value):
+    proxy = str(value or "").strip()
+    if not proxy:
+        return ""
+    parsed = urlparse(proxy)
+    try:
+        parse_proxy(proxy)
+    except ValueError as e:
+        raise ApiError(str(e))
+    auth = ""
+    if parsed.username:
+        auth = quote(unquote(parsed.username), safe="")
+        if parsed.password is not None:
+            auth += ":" + quote(unquote(parsed.password), safe="")
+        auth += "@"
+    port = parsed.port or 1080
+    return f"{parsed.scheme.lower()}://{auth}{parsed.hostname}:{port}"
+
+
+def normalize_config_patch(data, base=None):
+    cfg = dict(DEFAULT_CONFIG)
+    if base:
+        cfg.update(base)
+    for key in CONFIG_FIELDS:
+        if key not in data:
+            continue
+        value = data[key]
+        if key == "api_id":
+            cfg[key] = coerce_int_range(value, 0, 1, 2**31 - 1, key)
+        elif key == "download_threads":
+            cfg[key] = coerce_int_range(value, 16, 1, 128, key)
+        elif key == "cache_limit_mb":
+            cfg[key] = coerce_int_range(value, 1024, 128, 10240, key)
+        elif key == "session_type":
+            session_type = str(value or "file").strip()
+            if session_type not in ("file", "string"):
+                raise ApiError("session_type 仅支持 file/string")
+            cfg[key] = session_type
+        elif key == "session_file":
+            cfg[key] = normalize_session_file(value)
+        elif key == "proxy":
+            cfg[key] = normalize_proxy_url(value)
+        elif key == "web_token":
+            cfg[key] = normalize_web_token(value)
+        elif key == "api_hash":
+            next_value = normalize_api_hash(value)
+            if next_value:
+                cfg[key] = next_value
+        elif key == "phone":
+            cfg[key] = normalize_phone(value)
+        elif key == "string_session":
+            next_value = normalize_string_session(value)
+            if next_value:
+                cfg[key] = next_value
+        else:
+            cfg[key] = str(value or "").strip()
+    if cfg.get("session_type") == "string" and not cfg.get("string_session"):
+        raise ApiError("session_type=string 需要 string_session")
+    return cfg
 
 
 def resolve_under(base_dir, filename):
@@ -146,6 +312,83 @@ def run_host():
 
 def run_port():
     return int(os.environ.get("TELEGRAM_WEB_PORT") or os.environ.get("PORT") or "5000")
+
+
+def ensure_safe_bind(host):
+    if not is_loopback_host(host) and not current_web_token():
+        raise RuntimeError("对外监听必须先设置 TELEGRAM_WEB_TOKEN 或配置 web_token")
+
+
+def is_loopback_host(host):
+    return str(host or "").strip().lower() in ("127.0.0.1", "localhost", "::1")
+
+
+def current_web_token():
+    return (os.environ.get("TELEGRAM_WEB_TOKEN") or os.environ.get("WEB_TELEGRAM_TOKEN") or str(load_config().get("web_token") or "")).strip()
+
+
+def request_token():
+    auth = request.headers.get("Authorization", "")
+    if auth.lower().startswith("bearer "):
+        return auth[7:].strip()
+    token = (
+        request.headers.get("X-Web-Telegram-Token")
+        or request.headers.get("X-Web-Token")
+        or request.args.get("token")
+        or request.cookies.get(AUTH_COOKIE)
+        or ""
+    ).strip()
+    if token:
+        return token
+    if request.path == "/auth":
+        return request.form.get("token", "").strip()
+    return ""
+
+
+def token_matches(value):
+    token = current_web_token()
+    return bool(token and value and secrets.compare_digest(str(value), token))
+
+
+def web_auth_required():
+    return bool(current_web_token())
+
+
+def web_authorized():
+    return not web_auth_required() or token_matches(request_token())
+
+
+def safe_next_url(value):
+    target = str(value or "").strip()
+    if not target or not target.startswith("/") or target.startswith("//"):
+        return "/"
+    return target
+
+
+def unauthorized_response():
+    if request.path.startswith("/api/"):
+        return fail(ApiError("需要 Web Token", 401))
+    if request.path.startswith(("/download-file/", "/pictures/", "/media-cache/")):
+        abort(401)
+    return redirect("/auth?next=" + quote(request.full_path if request.query_string else request.path, safe=""))
+
+
+@app.before_request
+def require_web_auth():
+    path = request.path or ""
+    if path.startswith("/static/") or path.startswith("/socket.io/") or path in ("/auth", "/login", "/favicon.ico"):
+        return None
+    if not web_authorized():
+        return unauthorized_response()
+    return None
+
+
+@app.after_request
+def remember_query_token(resp):
+    token = request.args.get("token", "")
+    if token_matches(token):
+        resp.set_cookie(AUTH_COOKIE, current_web_token(), httponly=True, samesite="Lax")
+    return resp
 
 
 def peer_raw_id(peer_id):
@@ -359,7 +602,14 @@ class TelegramService:
         return {"connected": client.is_connected(), "authorized": authorized, "me": me, "config": {"api_id": self.cfg.get("api_id"), "phone": self.cfg.get("phone"), "proxy": self.cfg.get("proxy"), "session_type": self.cfg.get("session_type"), "download_threads": self.cfg.get("download_threads"), "cache_limit_mb": self.cfg.get("cache_limit_mb")}}
 
     async def start_login(self, api_id, api_hash, phone, proxy, download_threads=16, cache_limit_mb=1024):
-        self.cfg.update({"api_id": int(api_id), "api_hash": str(api_hash), "phone": str(phone), "proxy": str(proxy or ""), "download_threads": int(download_threads or 16), "cache_limit_mb": int(cache_limit_mb or 1024)})
+        self.cfg = normalize_config_patch({
+            "api_id": api_id,
+            "api_hash": api_hash,
+            "phone": phone,
+            "proxy": proxy,
+            "download_threads": download_threads,
+            "cache_limit_mb": cache_limit_mb,
+        }, self.cfg)
         save_config(self.cfg)
         self.reload_config()
         await self.reconnect()
@@ -624,6 +874,29 @@ def send_file_range(path: Path):
 
 @app.route("/")
 def home(): return redirect("/chats")
+@app.route("/auth", methods=["GET", "POST"])
+def page_auth():
+    next_url = safe_next_url(request.values.get("next") or "/")
+    if not web_auth_required():
+        return redirect(next_url)
+    error = ""
+    if request.method == "POST":
+        token = request.form.get("token", "")
+        if token_matches(token):
+            resp = make_response(redirect(next_url))
+            resp.set_cookie(AUTH_COOKIE, current_web_token(), httponly=True, samesite="Lax")
+            return resp
+        error = "Token 不正确"
+    return render_template("auth.html", active="", next_url=next_url, error=error)
+
+
+def socket_authorized(auth=None):
+    if not web_auth_required():
+        return True
+    token = ""
+    if isinstance(auth, dict):
+        token = str(auth.get("token") or auth.get("web_token") or "").strip()
+    return token_matches(token) or token_matches(request.args.get("token", "")) or token_matches(request.cookies.get(AUTH_COOKIE, ""))
 @app.route("/login")
 def page_login(): return render_template("login.html", active="login")
 @app.route("/chats")
@@ -639,13 +912,16 @@ def api_config():
         if request.method == "GET":
             return ok(public_config(load_config()))
         data = request_json_object()
-        cfg = load_config()
-        for k in CONFIG_FIELDS:
-            if k in data:
-                cfg[k] = data[k]
+        cfg = normalize_config_patch(data, load_config())
         save_config(cfg)
         tg.reload_config()
-        return ok(public_config(cfg), "配置已保存")
+        resp = ok(public_config(cfg), "配置已保存")
+        if "web_token" in data:
+            if cfg.get("web_token"):
+                resp.set_cookie(AUTH_COOKIE, cfg["web_token"], httponly=True, samesite="Lax")
+            else:
+                resp.delete_cookie(AUTH_COOKIE)
+        return resp
     except Exception as e:
         return fail(e)
 
@@ -658,13 +934,21 @@ def api_status():
 def api_login_start():
     try:
         data = request_json_object()
-        cfg = load_config()
+        current_cfg = load_config()
+        cfg = normalize_config_patch({
+            "api_id": data.get("api_id") or current_cfg.get("api_id"),
+            "api_hash": data.get("api_hash") or current_cfg.get("api_hash"),
+            "phone": data.get("phone") or current_cfg.get("phone"),
+            "proxy": data.get("proxy", current_cfg.get("proxy", "")),
+            "download_threads": data.get("download_threads", current_cfg.get("download_threads", 16)),
+            "cache_limit_mb": data.get("cache_limit_mb", current_cfg.get("cache_limit_mb", 1024)),
+        }, current_cfg)
         api_id = data.get("api_id") or cfg.get("api_id")
         api_hash = data.get("api_hash") or cfg.get("api_hash")
         phone = data.get("phone") or cfg.get("phone")
         if not api_id or not api_hash or not phone:
             return fail("缺少 api_id / api_hash / phone", 400)
-        result = tg.run(tg.start_login(api_id, api_hash, phone, data.get("proxy", cfg.get("proxy", "")), data.get("download_threads", cfg.get("download_threads", 16)), data.get("cache_limit_mb", cfg.get("cache_limit_mb", 1024))))
+        result = tg.run(tg.start_login(api_id, api_hash, phone, cfg.get("proxy", ""), cfg.get("download_threads", 16), cfg.get("cache_limit_mb", 1024)))
         return ok(result, result.get("message", "ok"))
     except Exception as e:
         return fail(e)
@@ -853,8 +1137,12 @@ def serve_media_cache(filename):
     return resp
 
 @socketio.on("connect")
-def ws_connect():
+def ws_connect(auth=None):
+    if not socket_authorized(auth):
+        return False
     socketio.emit("server_message", {"message": "connected"})
 
 if __name__ == "__main__":
-    socketio.run(app, host=run_host(), port=run_port(), debug=False, allow_unsafe_werkzeug=True)
+    host = run_host()
+    ensure_safe_bind(host)
+    socketio.run(app, host=host, port=run_port(), debug=False, allow_unsafe_werkzeug=True)

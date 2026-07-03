@@ -45,7 +45,6 @@
 | `templates/chats.html` | 会话列表页面 |
 | `templates/chat.html` | 单会话聊天页面、消息流和输入区容器 |
 | `templates/downloads.html` | 下载任务和已下载文件页面 |
-| `templates/config.html`、`templates/data.html`、`templates/media_view.html` | 预留/历史模板，使用前先确认是否有实际路由 |
 | `static/js/app.js` | 前端 API 封装、Socket.IO、会话/消息/媒体/下载交互 |
 | `static/css/app.css` | 全站样式和移动端布局 |
 | `docs/progress/` | 每阶段开发进度文档 |
@@ -437,3 +436,5 @@ rg -n "api\\(|fetch\\(|io\\(|/api/|socket|downloadMedia|prepareMedia|send" stati
 2026-07-04：建立 telegram-web 本地开发方案，明确项目定位、固定边界、路由/API、数据路径、开源复用策略、分阶段多会话机制、主代理+子代理协作、进度/交接文档模板和阶段验收命令。
 
 2026-07-04：Phase 1 建立安全基线，新增 `.gitignore` 和最小单测，收紧 JSON 请求体、文件路径边界、配置响应脱敏和默认本机监听。
+
+2026-07-04：Phase 2 增加 Web Token 访问控制、配置字段保存前校验、Socket.IO 鉴权和登录页配置保存入口，并删除未启用历史模板。

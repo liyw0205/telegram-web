@@ -8,7 +8,8 @@ let GALLERY_INDEX = 0;
 const SHOW_META = false;
 
 const THUMB_CACHE = new Map(); // key: `${peer}:${msgId}` -> url|null
-const socket = io();
+const URL_TOKEN = new URLSearchParams(location.search).get("token") || "";
+const socket = io({ auth: URL_TOKEN ? { token: URL_TOKEN } : {} });
 socket.on("new_message", msg => { if (msg && CURRENT_PEER) appendLiveMessage(msg); });
 
 function $(id){ return document.getElementById(id); }
@@ -28,6 +29,10 @@ async function api(path, options = {}){
     headers: isForm ? (options.headers || {}) : { "Content-Type":"application/json", ...(options.headers || {}) }
   });
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401) {
+    location.href = "/auth?next=" + encodeURIComponent(location.pathname + location.search);
+    throw new Error("需要 Web Token");
+  }
   if (!res.ok || data.success === false) throw new Error(data.error || data.message || "请求失败");
   return data.data;
 }
@@ -80,22 +85,42 @@ async function loadLoginPage(){
     $("api_hash").placeholder = cfg.api_hash_saved ? "已保存，留空沿用当前 api_hash" : "api_hash";
     $("phone").value = cfg.phone || "";
     $("proxy").value = cfg.proxy || "";
+    $("proxy").placeholder = cfg.proxy_redacted ? "已保存含凭据代理，留空沿用" : "socks5://127.0.0.1:7890";
     $("download_threads").value = cfg.download_threads || 16;
     $("cache_limit_mb").value = cfg.cache_limit_mb || 1024;
+    $("web_token").value = "";
+    $("web_token").placeholder = cfg.web_token_saved ? "已保存，留空不修改 Web Token" : "可选，保存后访问需要 Token";
+  } catch(e){ toast(e.message); }
+}
+function loginConfigPayload(includeWebToken = false){
+  const payload = {};
+  const apiId = $("api_id").value.trim();
+  const apiHash = $("api_hash").value.trim();
+  const phone = $("phone").value.trim();
+  const proxy = $("proxy").value.trim();
+  const threads = $("download_threads").value.trim();
+  const cacheLimit = $("cache_limit_mb").value.trim();
+  if (apiId) payload.api_id = Number(apiId);
+  if (apiHash) payload.api_hash = apiHash;
+  if (phone) payload.phone = phone;
+  if (proxy) payload.proxy = proxy;
+  if (threads) payload.download_threads = Number(threads);
+  if (cacheLimit) payload.cache_limit_mb = Number(cacheLimit);
+  if (includeWebToken && $("web_token").value.trim()) payload.web_token = $("web_token").value.trim();
+  return payload;
+}
+async function saveLoginConfig(){
+  try{
+    await api("/api/config", { method:"POST", body: JSON.stringify(loginConfigPayload(true)) });
+    toast("配置已保存");
+    loadLoginPage();
   } catch(e){ toast(e.message); }
 }
 async function startLogin(){
   try{
     const d = await api("/api/login/start", {
       method:"POST",
-      body: JSON.stringify({
-        api_id: Number($("api_id").value || 0),
-        api_hash: $("api_hash").value.trim(),
-        phone: $("phone").value.trim(),
-        proxy: $("proxy").value.trim(),
-        download_threads: Number($("download_threads").value || 16),
-        cache_limit_mb: Number($("cache_limit_mb").value || 1024),
-      })
+      body: JSON.stringify(loginConfigPayload(false))
     });
     toast(d.message || "已处理"); refreshStatus();
   } catch(e){ toast(e.message); }

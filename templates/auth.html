@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="phone-card">
+  <div class="login-avatar">🔒</div>
+  <h1>访问验证</h1>
+  <p>输入 Web Token 后继续使用</p>
+</section>
+
+<section class="card">
+  <h2>Web Token</h2>
+  {% if error %}<div class="empty">{{ error }}</div>{% endif %}
+  <form method="post" action="/auth">
+    <input type="hidden" name="next" value="{{ next_url }}">
+    <label>Token</label>
+    <input name="token" type="password" autocomplete="current-password" autofocus>
+    <button type="submit">进入</button>
+  </form>
+</section>
+{% endblock %}
