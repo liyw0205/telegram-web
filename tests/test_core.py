@@ -1,4 +1,5 @@
 import sys
+import time
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 import unittest
@@ -36,6 +37,61 @@ class CoreHelpersTest(unittest.TestCase):
         self.assertEqual(inside, (webapp.DOWNLOAD_DIR / "file.txt").resolve())
         self.assertIsNone(webapp.resolve_under(webapp.DOWNLOAD_DIR, "../app.py"))
         self.assertIsNone(webapp.resolve_under(webapp.DOWNLOAD_DIR, str((ROOT / "app.py").resolve())))
+
+    def test_parse_range_header(self):
+        self.assertIsNone(webapp.parse_range_header(None, 6))
+        self.assertIsNone(webapp.parse_range_header("items=1-2", 6))
+        self.assertEqual(webapp.parse_range_header("bytes=1-3", 6), (1, 3))
+        self.assertEqual(webapp.parse_range_header("bytes=3-", 6), (3, 5))
+        self.assertEqual(webapp.parse_range_header("bytes=-2", 6), (4, 5))
+        self.assertEqual(webapp.parse_range_header("bytes=-999", 6), (0, 5))
+        self.assertEqual(webapp.parse_range_header("bytes=99-100", 6), "unsatisfiable")
+        self.assertEqual(webapp.parse_range_header("bytes=3-1", 6), "invalid")
+        self.assertEqual(webapp.parse_range_header("bytes=1-2,3-4", 6), "invalid")
+
+    def test_task_store_terminal_state_guard_and_cleanup(self):
+        store = webapp.TaskStore()
+        controls = {}
+        with patch.object(webapp, "task_controls", controls):
+            done_id = store.create("download_media")
+            controls[done_id] = {"paused": False, "canceled": False}
+            store.update(done_id, status="done", progress=100)
+            store.update(done_id, status="running", progress=10)
+            self.assertEqual(store.get(done_id)["status"], "done")
+            self.assertEqual(store.get(done_id)["progress"], 100)
+
+            store.update(done_id, status="canceled", force=True)
+            self.assertEqual(store.get(done_id)["status"], "canceled")
+
+            old_id = store.create("prepare_media")
+            controls[old_id] = {"paused": False, "canceled": False}
+            store.update(old_id, status="error", error="boom")
+            with store.lock:
+                store.tasks[old_id]["updated_at"] = time.time() - 7200
+            active_id = store.create("download_media")
+            controls[active_id] = {"paused": False, "canceled": False}
+
+            store.cleanup(max_age=3600)
+            self.assertFalse(store.get(old_id))
+            self.assertNotIn(old_id, controls)
+            self.assertTrue(store.get(active_id))
+
+    def test_task_finish_and_fail_respect_canceled_tasks(self):
+        store = webapp.TaskStore()
+        controls = {}
+        with patch.object(webapp, "tasks", store), patch.object(webapp, "task_controls", controls):
+            canceled_id = store.create("download_media")
+            controls[canceled_id] = {"paused": False, "canceled": True}
+            webapp.task_finish(canceled_id, {"file": "x.txt", "size": 10})
+            self.assertEqual(store.get(canceled_id)["status"], "canceled")
+            self.assertNotIn(canceled_id, controls)
+
+            failed_id = store.create("download_media")
+            controls[failed_id] = {"paused": False, "canceled": False}
+            webapp.task_fail(failed_id, RuntimeError("boom"))
+            self.assertEqual(store.get(failed_id)["status"], "error")
+            self.assertEqual(store.get(failed_id)["error"], "boom")
+            self.assertNotIn(failed_id, controls)
 
     def test_public_config_redacts_secret_fields(self):
         cfg = {
@@ -163,10 +219,69 @@ class FlaskBoundaryTest(unittest.TestCase):
         self.assertEqual(response.data, b"bcd")
         self.assertEqual(response.headers["Content-Range"], "bytes 1-3/6")
 
+    def test_open_ended_and_suffix_range_requests(self):
+        response = self.client.get("/download-file/unit-test-download.txt", headers={"Range": "bytes=3-"}, buffered=True)
+        self.addCleanup(response.close)
+        self.assertEqual(response.status_code, 206)
+        self.assertEqual(response.data, b"def")
+        self.assertEqual(response.headers["Content-Range"], "bytes 3-5/6")
+
+        response = self.client.get("/download-file/unit-test-download.txt", headers={"Range": "bytes=-2"}, buffered=True)
+        self.addCleanup(response.close)
+        self.assertEqual(response.status_code, 206)
+        self.assertEqual(response.data, b"ef")
+        self.assertEqual(response.headers["Content-Range"], "bytes 4-5/6")
+
+    def test_invalid_range_request_returns_416(self):
+        response = self.client.get("/download-file/unit-test-download.txt", headers={"Range": "bytes=3-1"})
+        self.assertEqual(response.status_code, 416)
+        self.assertEqual(response.headers["Content-Range"], "bytes */6")
+
+        response = self.client.get("/download-file/unit-test-download.txt", headers={"Range": "bytes=1-2,3-4"})
+        self.assertEqual(response.status_code, 416)
+        self.assertEqual(response.headers["Content-Range"], "bytes */6")
+
+    def test_non_bytes_range_is_ignored(self):
+        response = self.client.get("/download-file/unit-test-download.txt", headers={"Range": "items=1-2"}, buffered=True)
+        self.addCleanup(response.close)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, b"abcdef")
+        self.assertEqual(response.headers["Accept-Ranges"], "bytes")
+
     def test_unsatisfiable_range_request(self):
         response = self.client.get("/download-file/unit-test-download.txt", headers={"Range": "bytes=99-100"})
         self.assertEqual(response.status_code, 416)
         self.assertEqual(response.headers["Content-Range"], "bytes */6")
+
+    def test_list_download_files_skips_partial_file(self):
+        partial = webapp.DOWNLOAD_DIR / "unit-test-download.txt.part"
+        partial.write_text("partial", "utf-8")
+        self.addCleanup(partial.unlink, missing_ok=True)
+        names = {row["name"] for row in webapp.list_download_files()}
+        self.assertIn("unit-test-download.txt", names)
+        self.assertNotIn("unit-test-download.txt.part", names)
+
+    def test_task_delete_removes_record_and_keeps_cancel_signal(self):
+        store = webapp.TaskStore()
+        controls = {}
+        task_id = store.create("download_media")
+        controls[task_id] = {"paused": False, "canceled": False}
+        with patch.object(webapp, "tasks", store), patch.object(webapp, "task_controls", controls):
+            response = self.client.delete(f"/api/task/{task_id}")
+            self.assertEqual(response.status_code, 200)
+            self.assertFalse(store.get(task_id))
+            self.assertTrue(controls[task_id]["canceled"])
+
+    def test_pause_rejects_terminal_task(self):
+        store = webapp.TaskStore()
+        controls = {}
+        task_id = store.create("download_media")
+        store.update(task_id, status="done")
+        with patch.object(webapp, "tasks", store), patch.object(webapp, "task_controls", controls):
+            response = self.client.post(f"/api/task/{task_id}/pause", json={})
+            self.assertEqual(response.status_code, 400)
+            self.assertFalse(response.get_json()["success"])
+            self.assertNotIn(task_id, controls)
 
     def test_list_download_files_skips_symlink(self):
         link = webapp.DOWNLOAD_DIR / "unit-test-link.txt"

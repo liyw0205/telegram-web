@@ -490,14 +490,21 @@ class TaskStore:
     def __init__(self):
         self.lock = threading.Lock()
         self.tasks = {}
+        self.terminal_statuses = {"done", "error", "canceled"}
     def create(self, kind, meta=None):
         task_id = uuid.uuid4().hex
         with self.lock:
             self.tasks[task_id] = {"id": task_id, "kind": kind, "status": "queued", "progress": 0, "downloaded": 0, "total": 0, "speed": 0, "file": "", "url": "", "path": "", "mime": "", "error": "", "created_at": time.time(), "updated_at": time.time(), "meta": meta or {}}
         return task_id
-    def update(self, task_id, **patch):
+    def update(self, task_id, force=False, **patch):
         with self.lock:
             if task_id not in self.tasks: return
+            current = self.tasks[task_id].get("status")
+            next_status = patch.get("status")
+            if current in self.terminal_statuses and not force:
+                return
+            if current == "canceled" and next_status != "canceled" and not force:
+                return
             self.tasks[task_id].update(patch)
             self.tasks[task_id]["updated_at"] = time.time()
     def get(self, task_id):
@@ -509,10 +516,61 @@ class TaskStore:
     def delete(self, task_id):
         with self.lock:
             self.tasks.pop(task_id, None)
+    def cleanup(self, max_age=3600, max_items=200):
+        now = time.time()
+        with self.lock:
+            removable = [
+                (task_id, task)
+                for task_id, task in self.tasks.items()
+                if task.get("status") in self.terminal_statuses and now - float(task.get("updated_at") or task.get("created_at") or now) > max_age
+            ]
+            for task_id, _task in removable:
+                self.tasks.pop(task_id, None)
+                task_controls.pop(task_id, None)
+            if len(self.tasks) <= max_items:
+                return
+            overflow = sorted(self.tasks.items(), key=lambda item: item[1].get("updated_at", 0))[:len(self.tasks) - max_items]
+            for task_id, task in overflow:
+                if task.get("status") in self.terminal_statuses:
+                    self.tasks.pop(task_id, None)
+                    task_controls.pop(task_id, None)
 
 
 tasks = TaskStore()
 task_controls = {}
+
+
+def task_is_canceled(task_id):
+    return bool(task_controls.get(task_id, {}).get("canceled") or tasks.get(task_id).get("status") == "canceled")
+
+
+def task_finish(task_id, result):
+    if task_is_canceled(task_id):
+        tasks.update(task_id, status="canceled", force=True)
+        task_controls.pop(task_id, None)
+        return
+    tasks.update(
+        task_id,
+        status="done",
+        progress=100,
+        file=result.get("file", ""),
+        path=result.get("path", ""),
+        url=result.get("url", ""),
+        mime=result.get("mime", ""),
+        downloaded=result.get("size", 0),
+        total=result.get("size", 0),
+        speed=0,
+    )
+    task_controls.pop(task_id, None)
+
+
+def task_fail(task_id, exc):
+    if task_is_canceled(task_id) or str(exc) == "任务已取消":
+        tasks.update(task_id, status="canceled", error="", force=True)
+        task_controls.pop(task_id, None)
+        return
+    tasks.update(task_id, status="error", error=str(exc), speed=0)
+    task_controls.pop(task_id, None)
 
 
 class ExecutorHolder:
@@ -693,7 +751,7 @@ class TelegramService:
     def find_cached_media(self, peer, msg_id):
         key = self.cache_key(peer, msg_id)
         for p in CACHE_DIR.glob(f"{key}_*"):
-            if p.is_file():
+            if p.is_file() and not p.name.endswith(".part") and p.stat().st_size > 0:
                 return p
         return None
 
@@ -762,6 +820,8 @@ class TelegramService:
             mime = mimetypes.guess_type(str(target_path))[0] or mime0 or "application/octet-stream"
             url = f"/media-cache/{quote(target_path.name)}" if target_dir == CACHE_DIR else f"/pictures/{quote(target_path.name)}" if target_dir == PICTURES_DIR else f"/download-file/{quote(target_path.name)}"
             return {"ready": True, "file": target_path.name, "path": str(target_path), "url": url, "mime": mime, "size": target_path.stat().st_size, "size_text": format_size(target_path.stat().st_size)}
+        if task_id and task_is_canceled(task_id):
+            raise RuntimeError("任务已取消")
         last_bytes = 0
         last_time = time.time()
 
@@ -788,10 +848,28 @@ class TelegramService:
             progress = int((int(current) / total) * 100) if total > 0 else 0
             tasks.update(task_id, status="running", downloaded=int(current), total=total, progress=max(0, min(100, progress)), speed=speed)
 
-        path = await client.download_media(msg, file=str(target_path), progress_callback=progress_callback)
-        if not path:
-            raise RuntimeError("媒体下载失败")
-        p = Path(path)
+        partial_path = target_path.with_name(target_path.name + ".part")
+        downloaded_path = None
+        try:
+            partial_path.unlink(missing_ok=True)
+            path = await client.download_media(msg, file=str(partial_path), progress_callback=progress_callback)
+            if not path:
+                raise RuntimeError("媒体下载失败")
+            downloaded_path = Path(path)
+            if not downloaded_path.exists() or downloaded_path.stat().st_size <= 0:
+                raise RuntimeError("媒体下载失败")
+            if task_id and task_is_canceled(task_id):
+                raise RuntimeError("任务已取消")
+            downloaded_path.replace(target_path)
+        except Exception:
+            for leftover in (partial_path, downloaded_path):
+                if leftover:
+                    try:
+                        Path(leftover).unlink(missing_ok=True)
+                    except OSError:
+                        pass
+            raise
+        p = target_path
         mime = mimetypes.guess_type(str(p))[0] or mime0 or "application/octet-stream"
         size = p.stat().st_size
         url = f"/media-cache/{quote(p.name)}" if target_dir == CACHE_DIR else f"/pictures/{quote(p.name)}" if target_dir == PICTURES_DIR else f"/download-file/{quote(p.name)}"
@@ -827,7 +905,7 @@ def list_download_files():
         rows = []
         for p in root.glob("*"):
             try:
-                if p.is_symlink() or not p.is_file():
+                if p.is_symlink() or not p.is_file() or p.name.endswith(".part"):
                     continue
                 st = p.stat()
             except OSError:
@@ -839,6 +917,43 @@ def list_download_files():
     return result
 
 
+def parse_range_header(range_header, file_size):
+    if not range_header:
+        return None
+    text = str(range_header).strip()
+    if not text.startswith("bytes="):
+        return None
+    spec = text[6:].strip()
+    if "," in spec:
+        return "invalid"
+    if "-" not in spec:
+        return "invalid"
+    start_s, end_s = spec.split("-", 1)
+    start_s, end_s = start_s.strip(), end_s.strip()
+    try:
+        if start_s == "":
+            suffix_len = int(end_s)
+            if suffix_len <= 0:
+                return "invalid"
+            if file_size <= 0:
+                return "invalid"
+            start = max(0, file_size - suffix_len)
+            end = file_size - 1
+        else:
+            start = int(start_s)
+            if start < 0:
+                return "invalid"
+            end = int(end_s) if end_s else file_size - 1
+            if end < start:
+                return "invalid"
+            if start >= file_size:
+                return "unsatisfiable"
+            end = min(end, file_size - 1)
+    except Exception:
+        return "invalid"
+    return (start, end)
+
+
 def send_file_range(path: Path):
     path = Path(path)
     if not path.exists() or not path.is_file():
@@ -846,19 +961,14 @@ def send_file_range(path: Path):
     file_size = path.stat().st_size
     mime = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
     range_header = request.headers.get("Range")
-    if not range_header:
-        return send_from_directory(path.parent, path.name, as_attachment=False)
-    try:
-        byte_range = range_header.replace("bytes=", "")
-        start_s, end_s = byte_range.split("-", 1)
-        start = int(start_s) if start_s else 0
-        end = int(end_s) if end_s else file_size - 1
-    except Exception:
-        start, end = 0, file_size - 1
-    start = max(0, start)
-    end = min(file_size - 1, end)
-    if start > end or start >= file_size:
+    parsed_range = parse_range_header(range_header, file_size)
+    if parsed_range is None:
+        response = send_from_directory(path.parent, path.name, as_attachment=False, conditional=not bool(range_header))
+        response.headers.setdefault("Accept-Ranges", "bytes")
+        return response
+    if parsed_range in ("invalid", "unsatisfiable"):
         return Response(status=416, headers={"Content-Range": f"bytes */{file_size}", "Accept-Ranges": "bytes"})
+    start, end = parsed_range
     length = end - start + 1
     def generate():
         with path.open("rb") as f:
@@ -1042,11 +1152,15 @@ def api_media_prepare():
         task_controls[task_id] = {"paused": False, "canceled": False}
         def job():
             try:
+                if task_is_canceled(task_id):
+                    raise RuntimeError("任务已取消")
                 tasks.update(task_id, status="running")
+                if task_is_canceled(task_id):
+                    raise RuntimeError("任务已取消")
                 result = tg.run(tg.prepare_media(peer, msg_id, task_id=task_id))
-                tasks.update(task_id, status="done", progress=100, file=result.get("file", ""), path=result.get("path", ""), url=result.get("url", ""), mime=result.get("mime", ""), downloaded=result.get("size", 0), total=result.get("size", 0))
+                task_finish(task_id, result)
             except Exception as e:
-                tasks.update(task_id, status="error", error=str(e))
+                task_fail(task_id, e)
         executor_holder.submit(job)
         return ok({"ready": False, "task_id": task_id})
     except Exception as e:
@@ -1062,11 +1176,15 @@ def api_download_media():
         task_controls[task_id] = {"paused": False, "canceled": False}
         def job():
             try:
+                if task_is_canceled(task_id):
+                    raise RuntimeError("任务已取消")
                 tasks.update(task_id, status="running")
+                if task_is_canceled(task_id):
+                    raise RuntimeError("任务已取消")
                 result = tg.run(tg.download_media(peer, msg_id, task_id=task_id))
-                tasks.update(task_id, status="done", progress=100, file=result.get("file", ""), path=result.get("path", ""), url=result.get("url", ""), mime=result.get("mime", ""), downloaded=result.get("size", 0), total=result.get("size", 0))
+                task_finish(task_id, result)
             except Exception as e:
-                tasks.update(task_id, status="error", error=str(e))
+                task_fail(task_id, e)
         executor_holder.submit(job)
         return ok({"task_id": task_id}, "下载任务已创建")
     except Exception as e:
@@ -1078,8 +1196,8 @@ def api_task(task_id):
     if not task: return fail("任务不存在", 404)
     if request.method == "DELETE":
         task_controls.setdefault(task_id, {"paused": False, "canceled": False})["canceled"] = True
-        tasks.update(task_id, status="canceled")
-        return ok({"task_id": task_id}, "已取消")
+        tasks.delete(task_id)
+        return ok({"task_id": task_id}, "已删除")
     task["downloaded_text"] = format_size(task.get("downloaded", 0))
     task["total_text"] = format_size(task.get("total", 0)) if task.get("total") else ""
     task["speed_text"] = format_size(task.get("speed", 0)) + "/s"
@@ -1087,20 +1205,27 @@ def api_task(task_id):
 
 @app.route("/api/task/<task_id>/pause", methods=["POST"])
 def api_task_pause(task_id):
-    if not tasks.get(task_id): return fail("任务不存在", 404)
+    task = tasks.get(task_id)
+    if not task: return fail("任务不存在", 404)
+    if task.get("status") in tasks.terminal_statuses:
+        return fail("任务已结束", 400)
     task_controls.setdefault(task_id, {"paused": False, "canceled": False})["paused"] = True
     tasks.update(task_id, status="paused")
     return ok({"task_id": task_id}, "已暂停")
 
 @app.route("/api/task/<task_id>/resume", methods=["POST"])
 def api_task_resume(task_id):
-    if not tasks.get(task_id): return fail("任务不存在", 404)
+    task = tasks.get(task_id)
+    if not task: return fail("任务不存在", 404)
+    if task.get("status") in tasks.terminal_statuses:
+        return fail("任务已结束", 400)
     task_controls.setdefault(task_id, {"paused": False, "canceled": False})["paused"] = False
     tasks.update(task_id, status="running")
     return ok({"task_id": task_id}, "已恢复")
 
 @app.route("/api/tasks")
 def api_tasks():
+    tasks.cleanup()
     result = []
     for task in tasks.list():
         task["downloaded_text"] = format_size(task.get("downloaded", 0))

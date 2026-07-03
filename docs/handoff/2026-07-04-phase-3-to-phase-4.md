@@ -1,7 +1,5 @@
 # Phase 3 -> Phase 4 交接
 
-最新交接文件：`docs/handoff/2026-07-04-phase-3-to-phase-4.md`
-
 ## 当前完成进度
 
 - 已完成 Web Token 和配置校验基础后，继续收紧媒体预览与下载任务可靠性。

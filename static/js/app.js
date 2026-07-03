@@ -520,9 +520,9 @@ async function downloadMedia(msgId){
     toast("下载任务已创建");
   } catch(e){ toast(e.message); }
 }
-async function taskPause(id){ try{ await api(`/api/task/${id}/pause`, { method:"POST", body:"{}" }); } catch(e){ toast(e.message); } }
-async function taskResume(id){ try{ await api(`/api/task/${id}/resume`, { method:"POST", body:"{}" }); } catch(e){ toast(e.message); } }
-async function taskDelete(id){ try{ await api(`/api/task/${id}`, { method:"DELETE" }); } catch(e){ toast(e.message); } }
+async function taskPause(id){ try{ await api(`/api/task/${id}/pause`, { method:"POST", body:"{}" }); await loadDownloadTasks(); } catch(e){ toast(e.message); } }
+async function taskResume(id){ try{ await api(`/api/task/${id}/resume`, { method:"POST", body:"{}" }); await loadDownloadTasks(); } catch(e){ toast(e.message); } }
+async function taskDelete(id){ try{ await api(`/api/task/${id}`, { method:"DELETE" }); await loadDownloadsPage(); } catch(e){ toast(e.message); } }
 
 async function initDownloadsPage(){
   await loadDownloadsPage();
@@ -537,7 +537,8 @@ async function loadDownloadTasks(){
     if (!list.length) return box.innerHTML = `<div class="empty">暂无任务</div>`;
     box.innerHTML = list.map(t => {
       const controls = t.status === "running" ? `<button class="small-btn gray" onclick="taskPause('${t.id}')">暂停</button>` : t.status === "paused" ? `<button class="small-btn" onclick="taskResume('${t.id}')">恢复</button>` : "";
-      return `<div class="task-card"><div class="task-head"><div><div class="task-title">${escapeHtml(t.kind)} · ${escapeHtml(t.status)}</div><div class="task-meta">${escapeHtml(t.downloaded_text || "0 B")}${t.total_text ? " / " + escapeHtml(t.total_text) : ""}${t.speed_text ? " · " + escapeHtml(t.speed_text) : ""}</div></div><b>${t.progress || 0}%</b></div><div class="progress-line"><div style="width:${t.progress || 0}%"></div></div><div class="actions" style="margin-top:8px">${controls}<button class="small-btn danger" onclick="taskDelete('${t.id}')">删除</button></div></div>`;
+      const deleteText = ["queued", "running", "paused"].includes(t.status) ? "取消" : "移除记录";
+      return `<div class="task-card"><div class="task-head"><div><div class="task-title">${escapeHtml(t.kind)} · ${escapeHtml(t.status)}</div><div class="task-meta">${escapeHtml(t.downloaded_text || "0 B")}${t.total_text ? " / " + escapeHtml(t.total_text) : ""}${t.speed_text ? " · " + escapeHtml(t.speed_text) : ""}</div></div><b>${t.progress || 0}%</b></div><div class="progress-line"><div style="width:${t.progress || 0}%"></div></div><div class="actions" style="margin-top:8px">${controls}<button class="small-btn danger" onclick="taskDelete('${t.id}')">${deleteText}</button></div></div>`;
     }).join("");
   } catch(e){ box.innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`; }
 }

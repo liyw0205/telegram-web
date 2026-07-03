@@ -109,7 +109,7 @@ data/uploads/
 | `POST /api/media/thumb` | 获取媒体缩略图 |
 | `POST /api/media/prepare` | 准备媒体预览缓存 |
 | `POST /api/download-media` | 创建下载任务 |
-| `GET/DELETE /api/task/<task_id>` | 查询或取消任务 |
+| `GET/DELETE /api/task/<task_id>` | 查询任务、取消运行中任务或移除任务记录 |
 | `POST /api/task/<task_id>/pause` | 暂停任务 |
 | `POST /api/task/<task_id>/resume` | 恢复任务 |
 | `GET /api/tasks` | 下载/预览任务列表 |
@@ -438,3 +438,5 @@ rg -n "api\\(|fetch\\(|io\\(|/api/|socket|downloadMedia|prepareMedia|send" stati
 2026-07-04：Phase 1 建立安全基线，新增 `.gitignore` 和最小单测，收紧 JSON 请求体、文件路径边界、配置响应脱敏和默认本机监听。
 
 2026-07-04：Phase 2 增加 Web Token 访问控制、配置字段保存前校验、Socket.IO 鉴权和登录页配置保存入口，并删除未启用历史模板。
+
+2026-07-04：Phase 3 强化媒体 Range 响应、任务终态保护、取消竞态处理、`.part` 临时下载和下载页任务操作反馈，测试扩展到 32 个。
