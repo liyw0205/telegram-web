@@ -2,6 +2,10 @@ let DIALOGS = [];
 let CURRENT_PEER = "";
 let OLDEST_MSG_ID = 0;
 let downloadsTimer = null;
+let downloadFilesOffset = 0;
+let downloadFilesHasMore = false;
+let downloadFilesLoading = false;
+const DOWNLOAD_FILE_LIMIT = 30;
 
 let GALLERY_ITEMS = [];
 let GALLERY_INDEX = 0;
@@ -522,14 +526,19 @@ async function downloadMedia(msgId){
 }
 async function taskPause(id){ try{ await api(`/api/task/${id}/pause`, { method:"POST", body:"{}" }); await loadDownloadTasks(); } catch(e){ toast(e.message); } }
 async function taskResume(id){ try{ await api(`/api/task/${id}/resume`, { method:"POST", body:"{}" }); await loadDownloadTasks(); } catch(e){ toast(e.message); } }
-async function taskDelete(id){ try{ await api(`/api/task/${id}`, { method:"DELETE" }); await loadDownloadsPage(); } catch(e){ toast(e.message); } }
+async function taskDelete(id){
+  try{
+    await api(`/api/task/${id}`, { method:"DELETE" });
+    await Promise.allSettled([loadDownloadTasks(), loadDownloadFiles(true)]);
+  } catch(e){ toast(e.message); }
+}
 
 async function initDownloadsPage(){
   await loadDownloadsPage();
   if (downloadsTimer) clearInterval(downloadsTimer);
-  downloadsTimer = setInterval(loadDownloadsPage, 1200);
+  downloadsTimer = setInterval(loadDownloadTasks, 1200);
 }
-async function loadDownloadsPage(){ await Promise.allSettled([loadDownloadTasks(), loadDownloadFiles()]); }
+async function loadDownloadsPage(){ await Promise.allSettled([loadDownloadTasks(), loadDownloadFiles(true)]); }
 async function loadDownloadTasks(){
   const box = $("downloadTaskList"); if (!box) return;
   try{
@@ -542,16 +551,51 @@ async function loadDownloadTasks(){
     }).join("");
   } catch(e){ box.innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`; }
 }
-async function loadDownloadFiles(){
+function renderDownloadFile(f){
+  const preview = f.is_image ? `<img src="${escapeHtml(f.url)}" class="download-thumb" loading="lazy">` : f.is_video ? `<video src="${escapeHtml(f.url)}" class="download-thumb" muted preload="metadata"></video>` : f.is_audio ? `<div class="audio-thumb">🎵</div>` : `<div class="file-thumb">📄</div>`;
+  return `<div class="download-card">${preview}<div class="download-info"><b>${escapeHtml(f.name)}</b><span>${escapeHtml(f.kind)} · ${escapeHtml(f.size_text || formatSize(f.size || 0))}</span></div><a href="${escapeHtml(f.url)}" target="_blank" class="small-btn">打开</a></div>`;
+}
+function updateDownloadFilePager(){
+  const more = $("downloadFileMore");
+  if (!more) return;
+  more.style.display = downloadFilesHasMore ? "inline-flex" : "none";
+  more.disabled = downloadFilesLoading;
+  more.textContent = downloadFilesLoading ? "加载中..." : "加载更多";
+}
+async function loadDownloadFiles(reset = false){
   const box = $("downloadFileList"); if (!box) return;
+  const status = $("downloadFileStatus");
+  if (downloadFilesLoading) return;
+  if (reset) {
+    downloadFilesOffset = 0;
+    downloadFilesHasMore = false;
+    updateDownloadFilePager();
+  }
+  downloadFilesLoading = true;
+  updateDownloadFilePager();
   try{
-    const list = await api("/api/download-files");
-    if (!list.length) return box.innerHTML = `<div class="empty">暂无文件</div>`;
-    box.innerHTML = list.map(f => {
-      const preview = f.is_image ? `<img src="${escapeHtml(f.url)}" class="download-thumb" loading="lazy">` : f.is_video ? `<video src="${escapeHtml(f.url)}" class="download-thumb" muted preload="metadata"></video>` : f.is_audio ? `<div class="audio-thumb">🎵</div>` : `<div class="file-thumb">📄</div>`;
-      return `<div class="download-card">${preview}<div class="download-info"><b>${escapeHtml(f.name)}</b><span>${escapeHtml(f.kind)} · ${escapeHtml(f.size_text || formatSize(f.size || 0))}</span></div><a href="${escapeHtml(f.url)}" target="_blank" class="small-btn">打开</a></div>`;
-    }).join("");
-  } catch(e){ box.innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`; }
+    const offset = reset ? 0 : downloadFilesOffset;
+    const data = await api(`/api/download-files?limit=${DOWNLOAD_FILE_LIMIT}&offset=${offset}`);
+    const list = Array.isArray(data) ? data : (data.items || []);
+    const total = Array.isArray(data) ? list.length : Number(data.total || 0);
+    if (reset) box.innerHTML = "";
+    if (!list.length && offset === 0) {
+      box.innerHTML = `<div class="empty">暂无文件</div>`;
+    } else if (list.length) {
+      const html = list.map(renderDownloadFile).join("");
+      if (reset) box.innerHTML = html;
+      else box.insertAdjacentHTML("beforeend", html);
+    }
+    downloadFilesOffset = offset + list.length;
+    downloadFilesHasMore = Array.isArray(data) ? false : Boolean(data.has_more);
+    if (status) status.textContent = total ? `已显示 ${Math.min(downloadFilesOffset, total)} / ${total}` : "";
+  } catch(e){
+    if (reset || downloadFilesOffset === 0) box.innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`;
+    else toast(e.message);
+  } finally {
+    downloadFilesLoading = false;
+    updateDownloadFilePager();
+  }
 }
 
 refreshStatus();

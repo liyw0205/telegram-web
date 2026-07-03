@@ -1,7 +1,5 @@
 # Phase 4 -> Phase 5 交接
 
-最新交接文件：`docs/handoff/2026-07-04-phase-4-to-phase-5.md`
-
 ## 当前完成进度
 
 - Phase 4 已完成下载页分页和错误响应分层。

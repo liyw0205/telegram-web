@@ -79,17 +79,37 @@ h1,h2,h3,p{margin-top:0}.hint{color:var(--muted);font-size:13px;line-height:1.6}
 .viewer-nav.left{left:10px}.viewer-nav.right{right:10px}
 
 .section-title{font-size:16px;margin:16px 0 8px}
+.section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:16px}
+.section-head .section-title{margin:0}
+.download-summary{min-height:18px;color:var(--muted);font-size:12px;margin:8px 0}
 .download-list{display:grid;gap:10px}
 .download-card{background:#fff;border:1px solid var(--border);border-radius:20px;padding:10px;display:grid;grid-template-columns:72px minmax(0,1fr) auto;gap:10px;align-items:center}
 .download-thumb,.audio-thumb,.file-thumb{width:72px;height:72px;border-radius:16px;object-fit:cover;background:#e2e8f0;display:grid;place-items:center;font-size:28px}
 .download-info b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .download-info span{display:block;color:var(--muted);font-size:12px;margin-top:4px}
+.pager-row{display:flex;justify-content:center;margin-top:12px}
 .task-card{background:#fff;border:1px solid var(--border);border-radius:20px;padding:12px}
 .task-head{display:flex;justify-content:space-between;gap:8px;margin-bottom:8px}
 .task-title{font-weight:900}.task-meta{color:var(--muted);font-size:12px}
 .progress-line{height:8px;background:rgba(100,116,139,.22);border-radius:999px;overflow:hidden}
 .progress-line div{height:100%;width:0;background:#22c55e}
 .empty{color:var(--muted);text-align:center;padding:28px}
+
+@media (max-width:640px){
+  body{padding-bottom:76px}
+  button,.small-btn{padding:8px 12px}
+  .page{padding:8px}
+  .card,.mobile-panel{border-radius:18px;padding:12px}
+  .page-title-row{align-items:flex-start}
+  .chat-page{height:calc(100vh - 60px - 66px - 16px);border-radius:18px}
+  .message{max-width:90%}
+  .composer-mini{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
+  .download-card{grid-template-columns:56px minmax(0,1fr);align-items:start}
+  .download-thumb,.audio-thumb,.file-thumb{width:56px;height:56px;border-radius:12px;font-size:22px}
+  .download-card .small-btn{grid-column:2;justify-self:start;padding:7px 12px}
+  .task-head{align-items:flex-start}
+  .section-head{align-items:center}
+}
 
 #toast{position:fixed;left:50%;bottom:82px;transform:translateX(-50%);z-index:100;display:grid;gap:8px;width:min(440px,calc(100vw - 32px));pointer-events:none}
 .toast-item{background:rgba(15,23,42,.95);color:#fff;padding:11px 14px;border-radius:999px;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,.22)}

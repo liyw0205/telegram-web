@@ -261,6 +261,53 @@ class FlaskBoundaryTest(unittest.TestCase):
         self.assertIn("unit-test-download.txt", names)
         self.assertNotIn("unit-test-download.txt.part", names)
 
+    def test_download_files_api_paginates_globally(self):
+        with TemporaryDirectory() as tmp:
+            download_dir = Path(tmp) / "Download"
+            pictures_dir = Path(tmp) / "Pictures"
+            download_dir.mkdir()
+            pictures_dir.mkdir()
+            files = [
+                (download_dir / "old.txt", 100),
+                (pictures_dir / "new.jpg", 300),
+                (download_dir / "middle.bin", 200),
+            ]
+            for path, mtime in files:
+                path.write_text(path.name, "utf-8")
+                webapp.os.utime(path, (mtime, mtime))
+            with patch.object(webapp, "DOWNLOAD_DIR", download_dir), patch.object(webapp, "PICTURES_DIR", pictures_dir):
+                rows, total = webapp.list_download_files(limit=2, offset=1, include_total=True)
+                self.assertEqual(total, 3)
+                self.assertEqual([row["name"] for row in rows], ["middle.bin", "old.txt"])
+
+                response = self.client.get("/api/download-files?limit=2&offset=1")
+                self.assertEqual(response.status_code, 200)
+                data = response.get_json()["data"]
+                self.assertEqual(data["total"], 3)
+                self.assertFalse(data["has_more"])
+                self.assertEqual([row["name"] for row in data["items"]], ["middle.bin", "old.txt"])
+
+    def test_download_files_api_validates_pagination_args(self):
+        response = self.client.get("/api/download-files?limit=0")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("limit", response.get_json()["error"])
+
+    def test_internal_api_errors_are_not_exposed(self):
+        with patch.object(webapp.tg, "status", new=lambda: object()), patch.object(webapp.tg, "run", side_effect=RuntimeError("secret internal path")):
+            with self.assertLogs(webapp.app.logger.name, level="ERROR"):
+                response = self.client.get("/api/status")
+        self.assertEqual(response.status_code, 500)
+        data = response.get_json()
+        self.assertEqual(data["error"], webapp.INTERNAL_ERROR_MESSAGE)
+        self.assertIn("error_id", data)
+        self.assertNotIn("secret", data["error"])
+
+    def test_public_runtime_errors_remain_actionable(self):
+        with patch.object(webapp.tg, "status", new=lambda: object()), patch.object(webapp.tg, "run", side_effect=RuntimeError("Telegram 未登录")):
+            response = self.client.get("/api/status")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()["error"], "Telegram 未登录")
+
     def test_task_delete_removes_record_and_keeps_cancel_signal(self):
         store = webapp.TaskStore()
         controls = {}

@@ -2,15 +2,20 @@
 {% block content %}
 <section class="mobile-panel">
   <div class="page-title-row">
-    <div><h1>下载</h1><p>支持暂停/恢复/删除任务</p></div>
+    <div><h1>下载</h1><p>支持暂停、恢复、取消和分页查看文件</p></div>
     <button class="round-btn" onclick="loadDownloadsPage()">↻</button>
   </div>
 
   <h2 class="section-title">任务</h2>
   <div id="downloadTaskList" class="download-list"></div>
 
-  <h2 class="section-title">已下载</h2>
+  <div class="section-head">
+    <h2 class="section-title">已下载</h2>
+    <button class="small-btn gray" onclick="loadDownloadFiles(true)">刷新文件</button>
+  </div>
+  <div id="downloadFileStatus" class="download-summary"></div>
   <div id="downloadFileList" class="download-list"></div>
+  <div class="pager-row"><button id="downloadFileMore" class="small-btn gray" onclick="loadDownloadFiles(false)" style="display:none">加载更多</button></div>
 </section>
 {% endblock %}
 {% block scripts %}<script>initDownloadsPage();</script>{% endblock %}

@@ -59,6 +59,15 @@ class ApiError(ValueError):
         self.code = code
 
 
+INTERNAL_ERROR_MESSAGE = "内部错误，请查看服务端日志"
+PUBLIC_RUNTIME_ERRORS = {
+    "Telegram 未登录",
+    "该消息没有媒体",
+    "媒体下载失败",
+    "任务已取消",
+}
+
+
 def load_config():
     if not CONFIG_FILE.exists():
         save_config(DEFAULT_CONFIG)
@@ -143,6 +152,13 @@ def request_json_object():
     if not isinstance(data, dict):
         raise ApiError("请求体必须是 JSON 对象")
     return data
+
+
+def query_int_arg(name, default, min_value, max_value):
+    value = request.args.get(name)
+    if value in (None, ""):
+        return int(default)
+    return coerce_int_range(value, default, min_value, max_value, name)
 
 
 def public_config(cfg):
@@ -895,14 +911,21 @@ def ok(data=None, message="ok"):
 
 
 def fail(e, code=500):
+    if not isinstance(e, BaseException):
+        return jsonify({"success": False, "error": str(e)}), code
     code = getattr(e, "code", code)
-    return jsonify({"success": False, "error": str(e)}), code
+    if isinstance(e, ApiError) or code < 500:
+        return jsonify({"success": False, "error": str(e)}), code
+    if isinstance(e, RuntimeError) and str(e) in PUBLIC_RUNTIME_ERRORS:
+        return jsonify({"success": False, "error": str(e)}), 400
+    error_id = uuid.uuid4().hex[:12]
+    app.logger.error("internal api error %s", error_id, exc_info=(type(e), e, e.__traceback__))
+    return jsonify({"success": False, "error": INTERNAL_ERROR_MESSAGE, "error_id": error_id}), 500
 
 
-def list_download_files():
-    result = []
+def list_download_files(limit=None, offset=0, include_total=False):
+    entries = []
     for root, kind, url_prefix in [(DOWNLOAD_DIR, "download", "/download-file"), (PICTURES_DIR, "picture", "/pictures")]:
-        rows = []
         for p in root.glob("*"):
             try:
                 if p.is_symlink() or not p.is_file() or p.name.endswith(".part"):
@@ -910,10 +933,21 @@ def list_download_files():
                 st = p.stat()
             except OSError:
                 continue
-            rows.append((p, st))
-        for p, st in sorted(rows, key=lambda row: row[1].st_mtime, reverse=True):
-            mime = mimetypes.guess_type(str(p))[0] or "application/octet-stream"
-            result.append({"name": p.name, "kind": kind, "size": st.st_size, "size_text": format_size(st.st_size), "mtime": int(st.st_mtime), "url": f"{url_prefix}/{quote(p.name)}", "mime": mime, "is_image": mime.startswith("image/"), "is_video": mime.startswith("video/"), "is_audio": mime.startswith("audio/")})
+            entries.append((p, st, kind, url_prefix))
+    entries.sort(key=lambda row: row[1].st_mtime, reverse=True)
+    total = len(entries)
+    offset = max(0, int(offset or 0))
+    if limit is not None:
+        limit = max(0, int(limit))
+        entries = entries[offset:offset + limit]
+    elif offset:
+        entries = entries[offset:]
+    result = []
+    for p, st, kind, url_prefix in entries:
+        mime = mimetypes.guess_type(str(p))[0] or "application/octet-stream"
+        result.append({"name": p.name, "kind": kind, "size": st.st_size, "size_text": format_size(st.st_size), "mtime": int(st.st_mtime), "url": f"{url_prefix}/{quote(p.name)}", "mime": mime, "is_image": mime.startswith("image/"), "is_video": mime.startswith("video/"), "is_audio": mime.startswith("audio/")})
+    if include_total:
+        return result, total
     return result
 
 
@@ -1014,7 +1048,7 @@ def page_chats(): return render_template("chats.html", active="chats")
 @app.route("/chat/<path:peer>")
 def page_chat(peer): return render_template("chat.html", active="chats", peer=unquote(peer))
 @app.route("/downloads")
-def page_downloads(): return render_template("downloads.html", active="downloads", files=list_download_files())
+def page_downloads(): return render_template("downloads.html", active="downloads")
 
 @app.route("/api/config", methods=["GET", "POST"])
 def api_config():
@@ -1089,7 +1123,9 @@ def api_logout():
 
 @app.route("/api/dialogs")
 def api_dialogs():
-    try: return ok(tg.run(tg.dialogs(int(request.args.get("limit", 120)))))
+    try:
+        limit = query_int_arg("limit", 120, 1, 500)
+        return ok(tg.run(tg.dialogs(limit)))
     except Exception as e: return fail(e)
 
 @app.route("/api/messages")
@@ -1097,7 +1133,9 @@ def api_messages():
     try:
         peer = request.args.get("peer", "")
         if not peer: return fail("缺少 peer", 400)
-        return ok(tg.run(tg.messages(peer, int(request.args.get("limit", 80)), int(request.args.get("offset_id", 0)))))
+        limit = query_int_arg("limit", 80, 1, 200)
+        offset_id = query_int_arg("offset_id", 0, 0, 2**63 - 1)
+        return ok(tg.run(tg.messages(peer, limit, offset_id)))
     except Exception as e:
         return fail(e)
 
@@ -1237,7 +1275,13 @@ def api_tasks():
 
 @app.route("/api/download-files")
 def api_download_files():
-    return ok(list_download_files())
+    try:
+        limit = query_int_arg("limit", 30, 1, 100)
+        offset = query_int_arg("offset", 0, 0, 100000)
+        items, total = list_download_files(limit=limit, offset=offset, include_total=True)
+        return ok({"items": items, "total": total, "limit": limit, "offset": offset, "has_more": offset + len(items) < total})
+    except Exception as e:
+        return fail(e)
 
 @app.route("/download-file/<path:filename>")
 def serve_download_file(filename):
