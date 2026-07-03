@@ -9,7 +9,7 @@
 - 聊天消息浏览
 - 媒体预览与下载
 - 下载任务管理（暂停 / 删除）
-- StringSession / `.session` 导入导出
+- StringSession / `.session` 配置支持
 - 缓存自动清理
 - Markdown 消息渲染
 
@@ -39,6 +39,12 @@ python app.py
 http://127.0.0.1:5000
 ```
 
+默认仅监听 `127.0.0.1`。如确需对局域网开放，请显式设置：
+
+```bash
+TELEGRAM_WEB_HOST=0.0.0.0 TELEGRAM_WEB_PORT=5000 python app.py
+```
+
 ## 配置
 
 登录页需要填写：
@@ -58,9 +64,9 @@ http://127.0.0.1:5000
 ├── requirements.txt
 ├── templates/
 ├── static/
-├── data/
-├── Download/
-└── Pictures/
+├── data/       # 运行配置和媒体缓存，已忽略提交
+├── Download/   # 下载文件，已忽略提交
+└── Pictures/   # 下载图片，已忽略提交
 ```
 
 ## 注意
@@ -69,6 +75,8 @@ http://127.0.0.1:5000
 - 首次登录需要验证码
 - 使用代理时请确保 SOCKS5 可用
 - 媒体缓存会按上限自动清理
+- `data/`、`Download/`、`Pictures/` 和 `.session` 文件是本地运行数据，不要提交到 Git
+- 当前登录页开放手机号登录、验证码和 2FA；StringSession / `.session` 可通过配置字段使用，独立导入导出页面尚未启用
 
 ## 说明
 

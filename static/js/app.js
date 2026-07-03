@@ -76,7 +76,8 @@ async function loadLoginPage(){
   try{
     const cfg = await api("/api/config");
     $("api_id").value = cfg.api_id || "";
-    $("api_hash").value = cfg.api_hash || "";
+    $("api_hash").value = "";
+    $("api_hash").placeholder = cfg.api_hash_saved ? "已保存，留空沿用当前 api_hash" : "api_hash";
     $("phone").value = cfg.phone || "";
     $("proxy").value = cfg.proxy || "";
     $("download_threads").value = cfg.download_threads || 16;

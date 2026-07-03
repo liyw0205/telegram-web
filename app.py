@@ -1,6 +1,7 @@
 import asyncio
 import json
 import mimetypes
+import os
 import shutil
 import threading
 import time
@@ -15,6 +16,7 @@ from flask_socketio import SocketIO
 from telethon import TelegramClient, events
 from telethon.errors import SessionPasswordNeededError
 from telethon.sessions import StringSession
+from werkzeug.exceptions import BadRequest
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
@@ -39,10 +41,17 @@ DEFAULT_CONFIG = {
     "download_threads": 16,
     "cache_limit_mb": 1024,
 }
+CONFIG_FIELDS = ["api_id", "api_hash", "phone", "proxy", "session_type", "session_file", "string_session", "download_threads", "cache_limit_mb"]
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "web-telegram-flask"
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
+
+
+class ApiError(ValueError):
+    def __init__(self, message, code=400):
+        super().__init__(message)
+        self.code = code
 
 
 def load_config():
@@ -91,6 +100,52 @@ def parse_proxy(proxy_url):
         raise ValueError("仅支持 socks4/socks5")
     proxy_type = socks.SOCKS5 if scheme == "socks5" else socks.SOCKS4
     return (proxy_type, u.hostname, int(u.port or 1080), True, unquote(u.username) if u.username else None, unquote(u.password) if u.password else None)
+
+
+def request_json_object():
+    if not request.is_json:
+        raise ApiError("请求体必须是 JSON 对象")
+    try:
+        data = request.get_json(silent=False)
+    except BadRequest:
+        raise ApiError("请求体必须是有效 JSON")
+    if data is None:
+        return {}
+    if not isinstance(data, dict):
+        raise ApiError("请求体必须是 JSON 对象")
+    return data
+
+
+def public_config(cfg):
+    data = dict(cfg)
+    data["api_hash_saved"] = bool(data.get("api_hash"))
+    data["session_file_saved"] = bool(data.get("session_file"))
+    data["string_session_saved"] = bool(data.get("string_session"))
+    data["api_hash"] = ""
+    data["session_file"] = ""
+    data["string_session"] = ""
+    return data
+
+
+def resolve_under(base_dir, filename):
+    base = Path(base_dir).resolve()
+    name = str(filename or "").strip()
+    if not name:
+        return None
+    candidate = (base / name).resolve()
+    try:
+        candidate.relative_to(base)
+    except ValueError:
+        return None
+    return candidate
+
+
+def run_host():
+    return os.environ.get("TELEGRAM_WEB_HOST") or os.environ.get("HOST") or "127.0.0.1"
+
+
+def run_port():
+    return int(os.environ.get("TELEGRAM_WEB_PORT") or os.environ.get("PORT") or "5000")
 
 
 def peer_raw_id(peer_id):
@@ -512,17 +567,25 @@ def ok(data=None, message="ok"):
 
 
 def fail(e, code=500):
+    code = getattr(e, "code", code)
     return jsonify({"success": False, "error": str(e)}), code
 
 
 def list_download_files():
     result = []
     for root, kind, url_prefix in [(DOWNLOAD_DIR, "download", "/download-file"), (PICTURES_DIR, "picture", "/pictures")]:
-        for p in sorted(root.glob("*"), key=lambda x: x.stat().st_mtime, reverse=True):
-            if not p.is_file():
+        rows = []
+        for p in root.glob("*"):
+            try:
+                if p.is_symlink() or not p.is_file():
+                    continue
+                st = p.stat()
+            except OSError:
                 continue
+            rows.append((p, st))
+        for p, st in sorted(rows, key=lambda row: row[1].st_mtime, reverse=True):
             mime = mimetypes.guess_type(str(p))[0] or "application/octet-stream"
-            result.append({"name": p.name, "kind": kind, "size": p.stat().st_size, "size_text": format_size(p.stat().st_size), "mtime": int(p.stat().st_mtime), "url": f"{url_prefix}/{quote(p.name)}", "mime": mime, "is_image": mime.startswith("image/"), "is_video": mime.startswith("video/"), "is_audio": mime.startswith("audio/")})
+            result.append({"name": p.name, "kind": kind, "size": st.st_size, "size_text": format_size(st.st_size), "mtime": int(st.st_mtime), "url": f"{url_prefix}/{quote(p.name)}", "mime": mime, "is_image": mime.startswith("image/"), "is_video": mime.startswith("video/"), "is_audio": mime.startswith("audio/")})
     return result
 
 
@@ -544,6 +607,8 @@ def send_file_range(path: Path):
         start, end = 0, file_size - 1
     start = max(0, start)
     end = min(file_size - 1, end)
+    if start > end or start >= file_size:
+        return Response(status=416, headers={"Content-Range": f"bytes */{file_size}", "Accept-Ranges": "bytes"})
     length = end - start + 1
     def generate():
         with path.open("rb") as f:
@@ -572,15 +637,15 @@ def page_downloads(): return render_template("downloads.html", active="downloads
 def api_config():
     try:
         if request.method == "GET":
-            return ok(load_config())
-        data = request.get_json(force=True) or {}
+            return ok(public_config(load_config()))
+        data = request_json_object()
         cfg = load_config()
-        for k in ["api_id", "api_hash", "phone", "proxy", "session_type", "session_file", "string_session", "download_threads", "cache_limit_mb"]:
+        for k in CONFIG_FIELDS:
             if k in data:
                 cfg[k] = data[k]
         save_config(cfg)
         tg.reload_config()
-        return ok(cfg, "配置已保存")
+        return ok(public_config(cfg), "配置已保存")
     except Exception as e:
         return fail(e)
 
@@ -592,10 +657,14 @@ def api_status():
 @app.route("/api/login/start", methods=["POST"])
 def api_login_start():
     try:
-        data = request.get_json(force=True) or {}
-        if not data.get("api_id") or not data.get("api_hash") or not data.get("phone"):
+        data = request_json_object()
+        cfg = load_config()
+        api_id = data.get("api_id") or cfg.get("api_id")
+        api_hash = data.get("api_hash") or cfg.get("api_hash")
+        phone = data.get("phone") or cfg.get("phone")
+        if not api_id or not api_hash or not phone:
             return fail("缺少 api_id / api_hash / phone", 400)
-        result = tg.run(tg.start_login(data["api_id"], data["api_hash"], data["phone"], data.get("proxy", ""), data.get("download_threads", 16), data.get("cache_limit_mb", 1024)))
+        result = tg.run(tg.start_login(api_id, api_hash, phone, data.get("proxy", cfg.get("proxy", "")), data.get("download_threads", cfg.get("download_threads", 16)), data.get("cache_limit_mb", cfg.get("cache_limit_mb", 1024))))
         return ok(result, result.get("message", "ok"))
     except Exception as e:
         return fail(e)
@@ -603,7 +672,7 @@ def api_login_start():
 @app.route("/api/login/code", methods=["POST"])
 def api_login_code():
     try:
-        code = (request.get_json(force=True) or {}).get("code")
+        code = request_json_object().get("code")
         if not code: return fail("缺少验证码", 400)
         result = tg.run(tg.sign_in_code(code))
         return ok(result, result.get("message", "ok"))
@@ -613,7 +682,7 @@ def api_login_code():
 @app.route("/api/login/password", methods=["POST"])
 def api_login_password():
     try:
-        password = (request.get_json(force=True) or {}).get("password")
+        password = request_json_object().get("password")
         if not password: return fail("缺少两步验证密码", 400)
         return ok(tg.run(tg.sign_in_password(password)), "登录成功")
     except Exception as e:
@@ -641,7 +710,7 @@ def api_messages():
 @app.route("/api/send", methods=["POST"])
 def api_send():
     try:
-        data = request.get_json(force=True) or {}
+        data = request_json_object()
         if not data.get("peer") or not data.get("text"):
             return fail("缺少 peer / text", 400)
         return ok(tg.run(tg.send_text(data["peer"], data["text"])), "消息已发送")
@@ -668,7 +737,7 @@ def api_send_file():
 @app.route("/api/media/thumb", methods=["POST"])
 def api_media_thumb():
     try:
-        data = request.get_json(force=True) or {}
+        data = request_json_object()
         if not data.get("peer") or not data.get("msg_id"):
             return fail("缺少 peer / msg_id", 400)
         return ok(tg.run(tg.get_media_thumb(data["peer"], data["msg_id"])))
@@ -678,7 +747,7 @@ def api_media_thumb():
 @app.route("/api/media/prepare", methods=["POST"])
 def api_media_prepare():
     try:
-        data = request.get_json(force=True) or {}
+        data = request_json_object()
         peer, msg_id = data.get("peer"), data.get("msg_id")
         if not peer or not msg_id: return fail("缺少 peer / msg_id", 400)
         cached = tg.find_cached_media(peer, msg_id)
@@ -702,7 +771,7 @@ def api_media_prepare():
 @app.route("/api/download-media", methods=["POST"])
 def api_download_media():
     try:
-        data = request.get_json(force=True) or {}
+        data = request_json_object()
         peer, msg_id = data.get("peer"), data.get("msg_id")
         if not peer or not msg_id: return fail("缺少 peer / msg_id", 400)
         task_id = tasks.create("download_media", {"peer": peer, "msg_id": msg_id})
@@ -762,12 +831,23 @@ def api_download_files():
     return ok(list_download_files())
 
 @app.route("/download-file/<path:filename>")
-def serve_download_file(filename): return send_file_range(DOWNLOAD_DIR / filename)
+def serve_download_file(filename):
+    path = resolve_under(DOWNLOAD_DIR, filename)
+    if not path:
+        abort(404)
+    return send_file_range(path)
 @app.route("/pictures/<path:filename>")
-def serve_picture(filename): return send_file_range(PICTURES_DIR / filename)
+def serve_picture(filename):
+    path = resolve_under(PICTURES_DIR, filename)
+    if not path:
+        abort(404)
+    return send_file_range(path)
 @app.route("/media-cache/<path:filename>")
 def serve_media_cache(filename):
-    resp = send_file_range(CACHE_DIR / filename)
+    path = resolve_under(CACHE_DIR, filename)
+    if not path:
+        abort(404)
+    resp = send_file_range(path)
     # 7天强缓存
     resp.headers["Cache-Control"] = "public, max-age=604800, immutable"
     return resp
@@ -777,4 +857,4 @@ def ws_connect():
     socketio.emit("server_message", {"message": "connected"})
 
 if __name__ == "__main__":
-    socketio.run(app, host="0.0.0.0", port=5000, debug=False, allow_unsafe_werkzeug=True)
+    socketio.run(app, host=run_host(), port=run_port(), debug=False, allow_unsafe_werkzeug=True)

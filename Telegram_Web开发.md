@@ -1,7 +1,7 @@
 # Telegram Web 开发方案
 
 > **当前产品基线**：Web Telegram，Flask + Flask-SocketIO + Telethon 的个人 Telegram Web 管理与聊天界面。
-> **仓库**：`telegram-web`，当前 HEAD `7dcec30`。
+> **仓库**：`telegram-web`，当前 HEAD 以 `git log -1 --oneline` 为准。
 > **本文**：`telegram-web/Telegram_Web开发.md`，长期开发方案和阶段会话协作规则。
 > **运行形态**：单进程 Python Web 服务，后端负责 Telegram 客户端、下载任务、媒体缓存和 Socket.IO 推送；前端为 Jinja 模板 + 原生 JavaScript/CSS。
 > **最低回归规则**：每阶段至少跑 `PYTHONPYCACHEPREFIX="${TMPDIR:-$HOME/.cache}/telegram-web-pycache" python -m py_compile app.py` 和 `git diff --check`；涉及行为修改时补充对应手动或自动验证。
@@ -435,3 +435,5 @@ rg -n "api\\(|fetch\\(|io\\(|/api/|socket|downloadMedia|prepareMedia|send" stati
 ## 最后更新
 
 2026-07-04：建立 telegram-web 本地开发方案，明确项目定位、固定边界、路由/API、数据路径、开源复用策略、分阶段多会话机制、主代理+子代理协作、进度/交接文档模板和阶段验收命令。
+
+2026-07-04：Phase 1 建立安全基线，新增 `.gitignore` 和最小单测，收紧 JSON 请求体、文件路径边界、配置响应脱敏和默认本机监听。

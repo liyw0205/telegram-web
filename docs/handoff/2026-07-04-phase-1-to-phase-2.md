@@ -1,7 +1,5 @@
 # Phase 1 -> Phase 2 交接
 
-最新交接文件：`docs/handoff/2026-07-04-phase-1-to-phase-2.md`
-
 ## 当前完成进度
 
 - Phase 1 已建立 `.gitignore` 和最小单测。
