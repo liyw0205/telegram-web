@@ -10,7 +10,7 @@
 - 媒体预览与下载
 - 下载任务管理（暂停 / 删除）
 - StringSession / `.session` 导入导出（导出需一次性令牌）
-- 敏感操作自定义确认弹窗
+- 敏感操作自定义确认弹窗（含键盘焦点循环）
 - 缓存自动清理
 - Markdown 消息渲染
 
@@ -39,7 +39,7 @@ node tests/frontend_smoke.js
 git diff --check
 ```
 
-`tests/frontend_smoke.js` 使用纯 Node mock 浏览器环境，覆盖前端自定义敏感确认弹窗、一次性 session 导出令牌请求链、API 错误 ID 复制、401 跳转、登录页脱敏配置占位符、任务删除确认、下载任务渲染、下载文件分页和错误提示，不需要真实 Telegram 登录或浏览器。
+`tests/frontend_smoke.js` 使用纯 Node mock 浏览器环境，覆盖前端自定义敏感确认弹窗、键盘焦点循环、一次性 session 导出令牌请求链、API 错误 ID 复制、401 跳转、登录页脱敏配置占位符、任务删除确认、下载任务渲染、下载文件分页和错误提示，不需要真实 Telegram 登录或浏览器。
 
 ## 运行
 

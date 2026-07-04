@@ -41,10 +41,32 @@ function bindConfirmDialog(){
   });
 }
 
+function getConfirmFocusables(){
+  return [$("confirmCancel"), $("confirmOk")].filter(el => el && !el.disabled && typeof el.focus === "function");
+}
+
 function handleConfirmKeydown(event){
-  if (!pendingConfirm || event.key !== "Escape") return;
-  event.preventDefault();
-  closeSensitiveConfirm(false);
+  if (!pendingConfirm) return;
+  if (event.key === "Escape") {
+    event.preventDefault();
+    closeSensitiveConfirm(false);
+    return;
+  }
+  if (event.key !== "Tab") return;
+  const focusables = getConfirmFocusables();
+  if (!focusables.length) {
+    event.preventDefault();
+    return;
+  }
+  const first = focusables[0], last = focusables[focusables.length - 1];
+  const current = document.activeElement;
+  if (event.shiftKey && (current === first || !focusables.includes(current))) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && (current === last || !focusables.includes(current))) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 function closeSensitiveConfirm(result){

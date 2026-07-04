@@ -103,18 +103,19 @@ function clickElement(harness, id) {
   harness.elements.get(id).dispatchEvent({ type: "click" });
 }
 
-function pressDocumentKey(harness, key) {
+function pressDocumentKey(harness, key, options = {}) {
   harness.context.document.dispatchEvent({
     type: "keydown",
     key,
-    preventDefault() { harness.calls.preventDefault.push(key); },
+    shiftKey: Boolean(options.shiftKey),
+    preventDefault() { harness.calls.preventDefault.push(options.shiftKey ? `Shift+${key}` : key); },
   });
 }
 
 function createHarness({ confirmResult = true, search = "", routes = {} } = {}) {
   const elements = new Map();
   const documentListeners = new Map();
-  const calls = { confirm: [], fetch: [], open: [], clipboard: [], toast: [], preventDefault: [] };
+  const calls = { confirm: [], fetch: [], open: [], clipboard: [], toast: [], preventDefault: [], focus: [] };
   registerElements(elements, [
     "api_id",
     "api_hash",
@@ -155,7 +156,7 @@ function createHarness({ confirmResult = true, search = "", routes = {} } = {}) 
       open(url, target, features) { calls.open.push({ url, target, features }); },
     },
     document: {
-      activeElement: createElementState(),
+      activeElement: createElementState({ id: "initialActive" }),
       getElementById(id) { return elements.get(id) || null; },
       createElement() { return createElementState({ remove() {} }); },
       querySelectorAll() { return []; },
@@ -192,6 +193,14 @@ function createHarness({ confirmResult = true, search = "", routes = {} } = {}) 
       return response(apiSuccess([]).body);
     },
   };
+  elements.forEach((element, id) => {
+    element.id = id;
+    element.focus = function focus() {
+      this.focused = true;
+      context.document.activeElement = this;
+      calls.focus.push(id);
+    };
+  });
   context.globalThis = context;
 
   vm.createContext(context);
@@ -207,6 +216,7 @@ async function testSensitiveConfirmCancelButtonResolvesFalse() {
   assert.strictEqual(harness.elements.get("confirmOverlay").hidden, false);
   assert(harness.elements.get("confirmOverlay").classList.contains("show"));
   assert.strictEqual(textOf(harness, "confirmMessage"), "确认取消测试");
+  assert.strictEqual(harness.context.document.activeElement, harness.elements.get("confirmCancel"));
   clickElement(harness, "confirmCancel");
   assert.strictEqual(await result, false);
   assert.strictEqual(harness.elements.get("confirmOverlay").hidden, true);
@@ -221,6 +231,28 @@ async function testSensitiveConfirmOkButtonResolvesTrue() {
   assert.strictEqual(await result, true);
   assert.strictEqual(harness.elements.get("confirmOverlay").hidden, true);
   assert.deepStrictEqual(harness.calls.confirm, []);
+}
+
+async function testSensitiveConfirmFocusTrapCyclesWithinDialog() {
+  const harness = createHarness();
+  const result = harness.context.confirmSensitive("焦点循环测试");
+  const cancel = harness.elements.get("confirmCancel");
+  const ok = harness.elements.get("confirmOk");
+
+  harness.context.document.activeElement = ok;
+  pressDocumentKey(harness, "Tab");
+  assert.strictEqual(harness.context.document.activeElement, cancel);
+
+  pressDocumentKey(harness, "Tab", { shiftKey: true });
+  assert.strictEqual(harness.context.document.activeElement, ok);
+
+  harness.context.document.activeElement = createElementState({ id: "outside" });
+  pressDocumentKey(harness, "Tab");
+  assert.strictEqual(harness.context.document.activeElement, cancel);
+
+  assert.deepStrictEqual(harness.calls.preventDefault, ["Tab", "Shift+Tab", "Tab"]);
+  clickElement(harness, "confirmCancel");
+  assert.strictEqual(await result, false);
 }
 
 async function testSensitiveConfirmEscapeCancels() {
@@ -447,6 +479,7 @@ async function testDownloadFilesErrorShowsToastAfterExistingPage() {
 async function main() {
   await testSensitiveConfirmCancelButtonResolvesFalse();
   await testSensitiveConfirmOkButtonResolvesTrue();
+  await testSensitiveConfirmFocusTrapCyclesWithinDialog();
   await testSensitiveConfirmEscapeCancels();
   await testSensitiveConfirmReentrantCancelsPrevious();
   await testApiCopiesErrorIdAndKeepsMessageActionable();
