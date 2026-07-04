@@ -10,9 +10,9 @@
 <header class="topbar">
   <div>
     <div class="app-title">Telegram</div>
-    <div id="topStatus" class="app-subtitle">状态检查中...</div>
+    <div id="topStatus" class="app-subtitle" role="status" aria-live="polite" aria-atomic="true">状态检查中...</div>
   </div>
-  <button class="round-btn" onclick="refreshStatus()">↻</button>
+  <button class="round-btn" onclick="refreshStatus()" aria-label="刷新连接状态" title="刷新连接状态">↻</button>
 </header>
 
 <main class="page">
@@ -26,7 +26,7 @@
   <a class="{{ 'active' if active == 'login' else '' }}" href="/login"><span>👤</span><b>登录</b></a>
 </nav>
 
-<div id="toast"></div>
+<div id="toast" role="status" aria-live="polite" aria-atomic="false"></div>
 
 <div id="confirmOverlay" class="confirm-overlay" hidden>
   <section class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="confirmTitle" aria-describedby="confirmMessage">

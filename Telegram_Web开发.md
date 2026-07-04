@@ -498,3 +498,5 @@ rg -n "api\\(|fetch\\(|io\\(|/api/|socket|downloadMedia|prepareMedia|send" stati
 2026-07-05：Phase 21 为 `/diagnostics` 增加标题关联、刷新按钮标签、live status、列表语义、动态 `aria-busy` 和成功/错误状态 class，并补充后端页面语义测试和纯 Node smoke 断言。
 
 2026-07-05：Phase 22 为 `/login` 配置表单补充显式 label 绑定、区域标题关联、敏感字段隐藏说明、操作按钮分组和按钮类型，并新增登录页静态可访问性测试。
+
+2026-07-05：Phase 23 为顶部连接状态、刷新按钮和 toast 容器补充 live/status 语义，`refreshStatus()` 增加动态 `aria-busy`，并补充全局反馈静态测试和纯 Node smoke。

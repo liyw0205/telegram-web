@@ -309,6 +309,18 @@ class FlaskBoundaryTest(unittest.TestCase):
             self.assertEqual(response.status_code, 200, path)
             self.assertIn("Web Telegram", response.get_data(as_text=True))
 
+    def test_base_template_has_global_feedback_semantics(self):
+        response = self.client.get("/login")
+        self.addCleanup(response.close)
+        html = response.get_data(as_text=True)
+        for fragment in (
+            'id="topStatus" class="app-subtitle" role="status" aria-live="polite" aria-atomic="true"',
+            'onclick="refreshStatus()" aria-label="刷新连接状态" title="刷新连接状态"',
+            'id="toast" role="status" aria-live="polite" aria-atomic="false"',
+            'class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="confirmTitle" aria-describedby="confirmMessage"',
+        ):
+            self.assertIn(fragment, html)
+
     def test_diagnostics_page_has_accessible_status_semantics(self):
         response = self.client.get("/diagnostics")
         self.addCleanup(response.close)

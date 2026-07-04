@@ -31,6 +31,11 @@ const LOGIN_ELEMENT_IDS = [
   "web_token",
 ];
 
+const GLOBAL_ELEMENT_IDS = [
+  "topStatus",
+  "toast",
+];
+
 const DOWNLOAD_ELEMENT_IDS = [
   "downloadTaskList",
   "downloadFileList",
@@ -64,6 +69,7 @@ const GALLERY_ELEMENT_IDS = [
 ];
 
 const DEFAULT_ELEMENT_IDS = [
+  ...GLOBAL_ELEMENT_IDS,
   ...LOGIN_ELEMENT_IDS,
   ...DOWNLOAD_ELEMENT_IDS,
   ...DIAGNOSTICS_ELEMENT_IDS,
@@ -470,6 +476,24 @@ async function testLoadLoginPageUsesRedactedConfigPlaceholders() {
   assert.strictEqual(harness.elements.get("web_token").placeholder, "已保存，留空不修改 Web Token");
 }
 
+async function testRefreshStatusUpdatesLiveRegionBusyState() {
+  const harness = createHarness({
+    routes: {
+      "/api/status": {
+        connected: true,
+        authorized: true,
+        me: { username: "alice" },
+      },
+    },
+  });
+
+  await harness.context.refreshStatus();
+
+  assert.strictEqual(harness.calls.fetch[0].path, "/api/status");
+  assert.strictEqual(textOf(harness, "topStatus"), "已登录：alice");
+  assert.strictEqual(harness.elements.get("topStatus").getAttribute("aria-busy"), "false");
+}
+
 async function testCancelingStringExportDoesNotRequestToken() {
   const { context, calls, elements } = createHarness();
   const action = context.exportStringSession();
@@ -730,6 +754,7 @@ const TEST_GROUPS = [
       testApiCopiesErrorIdAndKeepsMessageActionable,
       testApiRedirectsUnauthorizedToAuthPage,
       testLoadLoginPageUsesRedactedConfigPlaceholders,
+      testRefreshStatusUpdatesLiveRegionBusyState,
     ],
   },
   {

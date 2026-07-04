@@ -29,6 +29,7 @@ function toast(text){
   const box = $("toast"); if (!box) return alert(text);
   const item = document.createElement("div");
   item.className = "toast-item"; item.textContent = text;
+  if (typeof item.setAttribute === "function") item.setAttribute("role", "status");
   box.appendChild(item); setTimeout(() => item.remove(), 2400);
 }
 
@@ -248,15 +249,21 @@ function renderMarkdownSafe(raw){
 }
 
 async function refreshStatus(){
+  const top = $("topStatus");
+  if (top && typeof top.setAttribute === "function") top.setAttribute("aria-busy", "true");
   try{
     const d = await api("/api/status");
-    const top = $("topStatus"); if (!top) return;
+    if (!top) return;
     if (d.authorized) {
       const me = d.me || {};
       top.textContent = "已登录：" + (me.username || me.first_name || me.phone || me.id);
     } else if (d.connected) top.textContent = "已连接，未授权";
     else top.textContent = "未连接";
-  } catch { $("topStatus") && ($("topStatus").textContent = "状态异常"); }
+  } catch {
+    if (top) top.textContent = "状态异常";
+  } finally {
+    if (top && typeof top.setAttribute === "function") top.setAttribute("aria-busy", "false");
+  }
 }
 
 /* 登录 */
