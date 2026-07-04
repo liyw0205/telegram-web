@@ -151,8 +151,8 @@ function authSourceText(value){ return value === "environment" ? "环境变量" 
 function runtimeScopeText(runtime){ return runtime && runtime.loopback ? "本机监听" : "对外监听"; }
 function runtimePortText(runtime){ return runtime && runtime.port_valid ? String(runtime.port) : "无效"; }
 function diagnosticsValueText(value){ return typeof value === "boolean" ? boolText(value) : String(value ?? "-"); }
-function setAriaBusy(id, busy){
-  const el = $(id);
+function setAriaBusy(target, busy){
+  const el = typeof target === "string" ? $(target) : target;
   if (el && typeof el.setAttribute === "function") el.setAttribute("aria-busy", busy ? "true" : "false");
 }
 function setDiagnosticsState(state){
@@ -250,7 +250,7 @@ function renderMarkdownSafe(raw){
 
 async function refreshStatus(){
   const top = $("topStatus");
-  if (top && typeof top.setAttribute === "function") top.setAttribute("aria-busy", "true");
+  setAriaBusy(top, true);
   try{
     const d = await api("/api/status");
     if (!top) return;
@@ -262,7 +262,7 @@ async function refreshStatus(){
   } catch {
     if (top) top.textContent = "状态异常";
   } finally {
-    if (top && typeof top.setAttribute === "function") top.setAttribute("aria-busy", "false");
+    setAriaBusy(top, false);
   }
 }
 
@@ -836,25 +836,34 @@ async function initDownloadsPage(){
 async function loadDownloadsPage(){ await Promise.allSettled([loadDownloadTasks(), loadDownloadFiles(true)]); }
 async function loadDownloadTasks(){
   const box = $("downloadTaskList"); if (!box) return;
+  setAriaBusy(box, true);
   try{
     const list = await api("/api/tasks");
-    if (!list.length) return box.innerHTML = `<div class="empty">暂无任务</div>`;
+    if (!list.length) {
+      box.innerHTML = `<div class="empty" role="listitem">暂无任务</div>`;
+      return;
+    }
     box.innerHTML = list.map(t => {
       const controls = t.status === "running" ? `<button class="small-btn gray" onclick="taskPause('${t.id}')">暂停</button>` : t.status === "paused" ? `<button class="small-btn" onclick="taskResume('${t.id}')">恢复</button>` : "";
       const deleteText = ["queued", "running", "paused"].includes(t.status) ? "取消" : "移除记录";
-      return `<div class="task-card"><div class="task-head"><div><div class="task-title">${escapeHtml(t.kind)} · ${escapeHtml(t.status)}</div><div class="task-meta">${escapeHtml(t.downloaded_text || "0 B")}${t.total_text ? " / " + escapeHtml(t.total_text) : ""}${t.speed_text ? " · " + escapeHtml(t.speed_text) : ""}</div></div><b>${t.progress || 0}%</b></div><div class="progress-line"><div style="width:${t.progress || 0}%"></div></div><div class="actions" style="margin-top:8px">${controls}<button class="small-btn danger" onclick="taskDelete('${t.id}', '${escapeHtml(t.status)}')">${deleteText}</button></div></div>`;
+      return `<div class="task-card" role="listitem"><div class="task-head"><div><div class="task-title">${escapeHtml(t.kind)} · ${escapeHtml(t.status)}</div><div class="task-meta">${escapeHtml(t.downloaded_text || "0 B")}${t.total_text ? " / " + escapeHtml(t.total_text) : ""}${t.speed_text ? " · " + escapeHtml(t.speed_text) : ""}</div></div><b>${t.progress || 0}%</b></div><div class="progress-line"><div style="width:${t.progress || 0}%"></div></div><div class="actions" style="margin-top:8px">${controls}<button class="small-btn danger" onclick="taskDelete('${t.id}', '${escapeHtml(t.status)}')">${deleteText}</button></div></div>`;
     }).join("");
-  } catch(e){ box.innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`; }
+  } catch(e){
+    box.innerHTML = `<div class="empty" role="listitem">${escapeHtml(e.message)}</div>`;
+  } finally {
+    setAriaBusy(box, false);
+  }
 }
 function renderDownloadFile(f){
   const preview = f.is_image ? `<img src="${escapeHtml(f.url)}" class="download-thumb" loading="lazy">` : f.is_video ? `<video src="${escapeHtml(f.url)}" class="download-thumb" muted preload="metadata"></video>` : f.is_audio ? `<div class="audio-thumb">🎵</div>` : `<div class="file-thumb">📄</div>`;
-  return `<div class="download-card">${preview}<div class="download-info"><b>${escapeHtml(f.name)}</b><span>${escapeHtml(f.kind)} · ${escapeHtml(f.size_text || formatSize(f.size || 0))}</span></div><a href="${escapeHtml(f.url)}" target="_blank" class="small-btn">打开</a></div>`;
+  return `<div class="download-card" role="listitem">${preview}<div class="download-info"><b>${escapeHtml(f.name)}</b><span>${escapeHtml(f.kind)} · ${escapeHtml(f.size_text || formatSize(f.size || 0))}</span></div><a href="${escapeHtml(f.url)}" target="_blank" class="small-btn" aria-label="打开 ${escapeHtml(f.name)}">打开</a></div>`;
 }
 function updateDownloadFilePager(){
   const more = $("downloadFileMore");
   if (!more) return;
   more.style.display = downloadFilesHasMore ? "inline-flex" : "none";
   more.disabled = downloadFilesLoading;
+  if (typeof more.setAttribute === "function") more.setAttribute("aria-disabled", downloadFilesLoading ? "true" : "false");
   more.textContent = downloadFilesLoading ? "加载中..." : "加载更多";
 }
 async function loadDownloadFiles(reset = false){
@@ -867,6 +876,8 @@ async function loadDownloadFiles(reset = false){
     updateDownloadFilePager();
   }
   downloadFilesLoading = true;
+  setAriaBusy(box, true);
+  setAriaBusy(status, true);
   updateDownloadFilePager();
   try{
     const offset = reset ? 0 : downloadFilesOffset;
@@ -875,7 +886,7 @@ async function loadDownloadFiles(reset = false){
     const total = Array.isArray(data) ? list.length : Number(data.total || 0);
     if (reset) box.innerHTML = "";
     if (!list.length && offset === 0) {
-      box.innerHTML = `<div class="empty">暂无文件</div>`;
+      box.innerHTML = `<div class="empty" role="listitem">暂无文件</div>`;
     } else if (list.length) {
       const html = list.map(renderDownloadFile).join("");
       if (reset) box.innerHTML = html;
@@ -885,10 +896,12 @@ async function loadDownloadFiles(reset = false){
     downloadFilesHasMore = Array.isArray(data) ? false : Boolean(data.has_more);
     if (status) status.textContent = total ? `已显示 ${Math.min(downloadFilesOffset, total)} / ${total}` : "";
   } catch(e){
-    if (reset || downloadFilesOffset === 0) box.innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`;
+    if (reset || downloadFilesOffset === 0) box.innerHTML = `<div class="empty" role="listitem">${escapeHtml(e.message)}</div>`;
     else toast(e.message);
   } finally {
     downloadFilesLoading = false;
+    setAriaBusy(box, false);
+    setAriaBusy(status, false);
     updateDownloadFilePager();
   }
 }

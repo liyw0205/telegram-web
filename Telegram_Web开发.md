@@ -500,3 +500,5 @@ rg -n "api\\(|fetch\\(|io\\(|/api/|socket|downloadMedia|prepareMedia|send" stati
 2026-07-05：Phase 22 为 `/login` 配置表单补充显式 label 绑定、区域标题关联、敏感字段隐藏说明、操作按钮分组和按钮类型，并新增登录页静态可访问性测试。
 
 2026-07-05：Phase 23 为顶部连接状态、刷新按钮和 toast 容器补充 live/status 语义，`refreshStatus()` 增加动态 `aria-busy`，并补充全局反馈静态测试和纯 Node smoke。
+
+2026-07-05：Phase 24 为下载页任务列表、文件列表、分页状态和刷新/加载按钮补充可访问性语义，下载刷新流程增加动态 `aria-busy`/`aria-disabled`，并补充下载页静态测试和纯 Node smoke。

@@ -558,7 +558,9 @@ async function testDownloadTasksRenderControlsAndErrors() {
     },
   });
   await harness.context.loadDownloadTasks();
+  assert.strictEqual(harness.elements.get("downloadTaskList").getAttribute("aria-busy"), "false");
   expectHtmlIncludes(harness, "downloadTaskList", [
+    'role="listitem"',
     "download_media · running",
     "taskPause('run-1')",
     "取消",
@@ -568,6 +570,7 @@ async function testDownloadTasksRenderControlsAndErrors() {
 
   const failing = createHarness({ routes: { "/api/tasks": new Error("任务接口失败") } });
   await failing.context.loadDownloadTasks();
+  assert.strictEqual(failing.elements.get("downloadTaskList").getAttribute("aria-busy"), "false");
   expectHtmlIncludes(failing, "downloadTaskList", ["任务接口失败"]);
 }
 
@@ -599,11 +602,14 @@ async function testDownloadFilesPaginationAndRendering() {
   assert.strictEqual(harness.calls.fetch[0].path, "/api/download-files?limit=30&offset=0");
   expectHtmlIncludes(harness, "downloadFileList", ["photo.jpg", "clip.mp4"]);
   assert.strictEqual(textOf(harness, "downloadFileStatus"), "已显示 2 / 3");
+  assert.strictEqual(harness.elements.get("downloadFileList").getAttribute("aria-busy"), "false");
+  assert.strictEqual(harness.elements.get("downloadFileStatus").getAttribute("aria-busy"), "false");
+  assert.strictEqual(harness.elements.get("downloadFileMore").getAttribute("aria-disabled"), "false");
   assert.strictEqual(harness.elements.get("downloadFileMore").style.display, "inline-flex");
 
   await harness.context.loadDownloadFiles(false);
   assert.strictEqual(harness.calls.fetch[1].path, "/api/download-files?limit=30&offset=2");
-  expectHtmlIncludes(harness, "downloadFileList", ["doc.txt"]);
+  expectHtmlIncludes(harness, "downloadFileList", ['role="listitem"', 'aria-label="打开 doc.txt"', "doc.txt"]);
   assert.strictEqual(textOf(harness, "downloadFileStatus"), "已显示 3 / 3");
   assert.strictEqual(harness.elements.get("downloadFileMore").style.display, "none");
 }

@@ -321,6 +321,24 @@ class FlaskBoundaryTest(unittest.TestCase):
         ):
             self.assertIn(fragment, html)
 
+    def test_downloads_page_has_accessible_status_semantics(self):
+        response = self.client.get("/downloads")
+        self.addCleanup(response.close)
+        html = response.get_data(as_text=True)
+        for fragment in (
+            '<section class="mobile-panel" aria-labelledby="downloadsTitle">',
+            '<h1 id="downloadsTitle">下载</h1>',
+            'onclick="loadDownloadsPage()" aria-label="刷新下载任务和文件" title="刷新下载任务和文件"',
+            '<h2 class="section-title" id="downloadTaskTitle">任务</h2>',
+            'id="downloadTaskList" class="download-list" role="list" aria-labelledby="downloadTaskTitle" aria-live="polite" aria-busy="true"',
+            '<h2 class="section-title" id="downloadFileTitle">已下载</h2>',
+            'onclick="loadDownloadFiles(true)" aria-label="刷新已下载文件"',
+            'id="downloadFileStatus" class="download-summary" role="status" aria-live="polite" aria-atomic="true" aria-busy="true"',
+            'id="downloadFileList" class="download-list" role="list" aria-labelledby="downloadFileTitle" aria-live="polite" aria-busy="true"',
+            'id="downloadFileMore" class="small-btn gray" type="button" onclick="loadDownloadFiles(false)" aria-controls="downloadFileList" aria-label="加载更多已下载文件"',
+        ):
+            self.assertIn(fragment, html)
+
     def test_diagnostics_page_has_accessible_status_semantics(self):
         response = self.client.get("/diagnostics")
         self.addCleanup(response.close)
