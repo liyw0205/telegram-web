@@ -496,3 +496,5 @@ rg -n "api\\(|fetch\\(|io\\(|/api/|socket|downloadMedia|prepareMedia|send" stati
 2026-07-05：Phase 20 复核真实浏览器 smoke 条件仍不足以引入自动化浏览器测试，将 `/diagnostics` 加入手动浏览器 smoke 清单，并记录继续不引入 npm/Playwright 依赖的边界。
 
 2026-07-05：Phase 21 为 `/diagnostics` 增加标题关联、刷新按钮标签、live status、列表语义、动态 `aria-busy` 和成功/错误状态 class，并补充后端页面语义测试和纯 Node smoke 断言。
+
+2026-07-05：Phase 22 为 `/login` 配置表单补充显式 label 绑定、区域标题关联、敏感字段隐藏说明、操作按钮分组和按钮类型，并新增登录页静态可访问性测试。

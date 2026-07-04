@@ -324,6 +324,31 @@ class FlaskBoundaryTest(unittest.TestCase):
         ):
             self.assertIn(fragment, html)
 
+    def test_login_page_has_accessible_form_semantics(self):
+        response = self.client.get("/login")
+        self.addCleanup(response.close)
+        html = response.get_data(as_text=True)
+        for fragment in (
+            '<section class="phone-card" aria-labelledby="loginHeroTitle">',
+            '<h1 id="loginHeroTitle">Web Telegram</h1>',
+            '<section class="card" aria-labelledby="loginConfigTitle">',
+            '<h2 id="loginConfigTitle">手机号登录</h2>',
+            '<label for="api_id">api_id</label>',
+            '<label for="api_hash">api_hash</label><input id="api_hash" autocomplete="off" aria-describedby="apiHashHelp"',
+            'id="apiHashHelp" class="sr-only"',
+            '<label for="phone">手机号</label><input id="phone" autocomplete="tel"',
+            '<label for="proxy">SOCKS5 代理</label><input id="proxy" autocomplete="off" aria-describedby="proxyHelp"',
+            '<label for="string_session">StringSession</label><textarea id="string_session" autocomplete="off" spellcheck="false" aria-describedby="stringSessionHelp"',
+            '<label for="web_token">Web Token</label><input id="web_token" type="password" autocomplete="new-password" aria-describedby="webTokenHelp"',
+            '<div class="action-grid" role="group" aria-label="登录操作">',
+            '<section class="card" aria-labelledby="sessionMigrationTitle">',
+            '<div class="action-grid" role="group" aria-label="StringSession 操作">',
+            '<label for="sessionFileInput">.session 文件</label><input id="sessionFileInput" type="file" accept=".session" aria-describedby="sessionUploadHelp">',
+            '<div class="action-grid" role="group" aria-label=".session 文件操作">',
+            '<button type="button" class="gray" onclick="saveLoginConfig()">保存配置</button>',
+        ):
+            self.assertIn(fragment, html)
+
     def test_non_object_json_returns_400(self):
         response = self.client.post("/api/send", json=[])
         self.assertEqual(response.status_code, 400)
