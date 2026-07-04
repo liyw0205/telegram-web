@@ -18,17 +18,51 @@ function apiFailure(error, status = 500, extra = {}) {
   return { status, body: { success: false, error, ...extra } };
 }
 
+function createClassList() {
+  const values = new Set();
+  return {
+    add(...names) { names.forEach((name) => values.add(name)); },
+    remove(...names) { names.forEach((name) => values.delete(name)); },
+    contains(name) { return values.has(name); },
+    toggle(name) {
+      if (values.has(name)) {
+        values.delete(name);
+        return false;
+      }
+      values.add(name);
+      return true;
+    },
+    toString() { return Array.from(values).join(" "); },
+  };
+}
+
 function createElementState(initial = {}) {
+  const listeners = new Map();
   return {
     value: "",
     placeholder: "",
     innerHTML: "",
     textContent: "",
     style: {},
+    hidden: false,
     disabled: false,
     appended: [],
+    classList: createClassList(),
     appendChild(item) { this.appended.push(item); },
     insertAdjacentHTML(_position, html) { this.innerHTML += html; },
+    addEventListener(type, handler) {
+      if (!listeners.has(type)) listeners.set(type, []);
+      listeners.get(type).push(handler);
+    },
+    removeEventListener(type, handler) {
+      const items = listeners.get(type) || [];
+      listeners.set(type, items.filter((item) => item !== handler));
+    },
+    dispatchEvent(event) {
+      const normalized = { target: this, preventDefault() {}, ...event };
+      (listeners.get(normalized.type) || []).forEach((handler) => handler(normalized));
+    },
+    focus() { this.focused = true; },
     ...initial,
   };
 }
@@ -65,9 +99,22 @@ function expectHtmlIncludes(harness, id, fragments) {
   fragments.forEach((fragment) => assert(html.includes(fragment), `expected ${id} to include ${fragment}`));
 }
 
+function clickElement(harness, id) {
+  harness.elements.get(id).dispatchEvent({ type: "click" });
+}
+
+function pressDocumentKey(harness, key) {
+  harness.context.document.dispatchEvent({
+    type: "keydown",
+    key,
+    preventDefault() { harness.calls.preventDefault.push(key); },
+  });
+}
+
 function createHarness({ confirmResult = true, search = "", routes = {} } = {}) {
   const elements = new Map();
-  const calls = { confirm: [], fetch: [], open: [], clipboard: [], toast: [] };
+  const documentListeners = new Map();
+  const calls = { confirm: [], fetch: [], open: [], clipboard: [], toast: [], preventDefault: [] };
   registerElements(elements, [
     "api_id",
     "api_hash",
@@ -82,7 +129,11 @@ function createHarness({ confirmResult = true, search = "", routes = {} } = {}) 
     "downloadTaskList",
     "downloadFileList",
     "downloadFileStatus",
+    "confirmMessage",
+    "confirmOk",
+    "confirmCancel",
   ]);
+  elements.set("confirmOverlay", createElementState({ hidden: true }));
   elements.set("downloadFileMore", createElementState({ style: { display: "none" } }));
   elements.set("toast", createElementState({ appendChild(item) { calls.toast.push(item.textContent); } }));
 
@@ -104,9 +155,21 @@ function createHarness({ confirmResult = true, search = "", routes = {} } = {}) 
       open(url, target, features) { calls.open.push({ url, target, features }); },
     },
     document: {
+      activeElement: createElementState(),
       getElementById(id) { return elements.get(id) || null; },
-      createElement() { return { className: "", textContent: "", remove() {} }; },
+      createElement() { return createElementState({ remove() {} }); },
       querySelectorAll() { return []; },
+      addEventListener(type, handler) {
+        if (!documentListeners.has(type)) documentListeners.set(type, []);
+        documentListeners.get(type).push(handler);
+      },
+      removeEventListener(type, handler) {
+        const items = documentListeners.get(type) || [];
+        documentListeners.set(type, items.filter((item) => item !== handler));
+      },
+      dispatchEvent(event) {
+        (documentListeners.get(event.type) || []).forEach((handler) => handler(event));
+      },
     },
     io() { return { on() {} }; },
     fetch: async (path, options = {}) => {
@@ -136,6 +199,47 @@ function createHarness({ confirmResult = true, search = "", routes = {} } = {}) 
   calls.fetch.length = 0;
   calls.toast.length = 0;
   return { context, elements, calls };
+}
+
+async function testSensitiveConfirmCancelButtonResolvesFalse() {
+  const harness = createHarness();
+  const result = harness.context.confirmSensitive("确认取消测试");
+  assert.strictEqual(harness.elements.get("confirmOverlay").hidden, false);
+  assert(harness.elements.get("confirmOverlay").classList.contains("show"));
+  assert.strictEqual(textOf(harness, "confirmMessage"), "确认取消测试");
+  clickElement(harness, "confirmCancel");
+  assert.strictEqual(await result, false);
+  assert.strictEqual(harness.elements.get("confirmOverlay").hidden, true);
+  assert(!harness.elements.get("confirmOverlay").classList.contains("show"));
+  assert.deepStrictEqual(harness.calls.confirm, []);
+}
+
+async function testSensitiveConfirmOkButtonResolvesTrue() {
+  const harness = createHarness();
+  const result = harness.context.confirmSensitive("确认继续测试");
+  clickElement(harness, "confirmOk");
+  assert.strictEqual(await result, true);
+  assert.strictEqual(harness.elements.get("confirmOverlay").hidden, true);
+  assert.deepStrictEqual(harness.calls.confirm, []);
+}
+
+async function testSensitiveConfirmEscapeCancels() {
+  const harness = createHarness();
+  const result = harness.context.confirmSensitive("按 Esc 取消");
+  pressDocumentKey(harness, "Escape");
+  assert.strictEqual(await result, false);
+  assert.strictEqual(harness.elements.get("confirmOverlay").hidden, true);
+  assert.deepStrictEqual(harness.calls.preventDefault, ["Escape"]);
+}
+
+async function testSensitiveConfirmReentrantCancelsPrevious() {
+  const harness = createHarness();
+  const first = harness.context.confirmSensitive("第一个确认");
+  const second = harness.context.confirmSensitive("第二个确认");
+  assert.strictEqual(await first, false);
+  assert.strictEqual(textOf(harness, "confirmMessage"), "第二个确认");
+  clickElement(harness, "confirmOk");
+  assert.strictEqual(await second, true);
 }
 
 async function testApiCopiesErrorIdAndKeepsMessageActionable() {
@@ -209,16 +313,21 @@ async function testLoadLoginPageUsesRedactedConfigPlaceholders() {
 }
 
 async function testCancelingStringExportDoesNotRequestToken() {
-  const { context, calls } = createHarness({ confirmResult: false });
-  await context.exportStringSession();
-  assert.strictEqual(calls.confirm.length, 1);
+  const { context, calls, elements } = createHarness();
+  const action = context.exportStringSession();
+  assert.strictEqual(elements.get("confirmMessage").textContent, "确认导出 StringSession？导出的文本可直接登录此 Telegram 账号。");
+  clickElement({ elements }, "confirmCancel");
+  await action;
+  assert.strictEqual(calls.confirm.length, 0);
   assert.deepStrictEqual(calls.fetch, []);
 }
 
 async function testStringExportRequestsOneTimeToken() {
-  const { context, elements, calls } = createHarness({ confirmResult: true });
-  await context.exportStringSession();
-  assert.strictEqual(calls.confirm.length, 1);
+  const { context, elements, calls } = createHarness();
+  const action = context.exportStringSession();
+  clickElement({ elements }, "confirmOk");
+  await action;
+  assert.strictEqual(calls.confirm.length, 0);
   assert.strictEqual(calls.fetch[0].path, "/api/session/export-token");
   assert.deepStrictEqual(JSON.parse(calls.fetch[0].options.body), { kind: "string" });
   assert.strictEqual(calls.fetch[1].path, "/api/session/string?export_token=string-token");
@@ -227,8 +336,10 @@ async function testStringExportRequestsOneTimeToken() {
 }
 
 async function testFileExportOpensTokenizedDownloadUrl() {
-  const { context, calls } = createHarness({ confirmResult: true, search: "?token=web-token" });
-  await context.exportSessionFile();
+  const { context, elements, calls } = createHarness({ search: "?token=web-token" });
+  const action = context.exportSessionFile();
+  clickElement({ elements }, "confirmOk");
+  await action;
   assert.strictEqual(calls.fetch[0].path, "/api/session/export-token");
   assert.deepStrictEqual(JSON.parse(calls.fetch[0].options.body), { kind: "file" });
   assert.strictEqual(calls.open.length, 1);
@@ -236,15 +347,21 @@ async function testFileExportOpensTokenizedDownloadUrl() {
 }
 
 async function testTaskDeleteConfirmationControlsRequest() {
-  let harness = createHarness({ confirmResult: false });
-  await harness.context.taskDelete("task-1", "running");
-  assert.strictEqual(harness.calls.confirm.length, 1);
+  let harness = createHarness();
+  let action = harness.context.taskDelete("task-1", "running");
+  assert.strictEqual(textOf(harness, "confirmMessage"), "确认取消这个下载/预览任务？");
+  clickElement(harness, "confirmCancel");
+  await action;
+  assert.strictEqual(harness.calls.confirm.length, 0);
   assert.deepStrictEqual(harness.calls.fetch, []);
 
-  harness = createHarness({ confirmResult: true });
+  harness = createHarness();
   harness.context.loadDownloadTasks = async () => {};
   harness.context.loadDownloadFiles = async () => {};
-  await harness.context.taskDelete("task-1", "done");
+  action = harness.context.taskDelete("task-1", "done");
+  assert.strictEqual(textOf(harness, "confirmMessage"), "确认移除这条任务记录？");
+  clickElement(harness, "confirmOk");
+  await action;
   assert.strictEqual(harness.calls.fetch[0].path, "/api/task/task-1");
   assert.strictEqual(harness.calls.fetch[0].options.method, "DELETE");
 }
@@ -328,6 +445,10 @@ async function testDownloadFilesErrorShowsToastAfterExistingPage() {
 }
 
 async function main() {
+  await testSensitiveConfirmCancelButtonResolvesFalse();
+  await testSensitiveConfirmOkButtonResolvesTrue();
+  await testSensitiveConfirmEscapeCancels();
+  await testSensitiveConfirmReentrantCancelsPrevious();
   await testApiCopiesErrorIdAndKeepsMessageActionable();
   await testApiRedirectsUnauthorizedToAuthPage();
   await testLoadLoginPageUsesRedactedConfigPlaceholders();

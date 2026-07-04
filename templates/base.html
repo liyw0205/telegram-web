@@ -27,6 +27,17 @@
 
 <div id="toast"></div>
 
+<div id="confirmOverlay" class="confirm-overlay" hidden>
+  <section class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="confirmTitle" aria-describedby="confirmMessage">
+    <h2 id="confirmTitle">确认操作</h2>
+    <p id="confirmMessage"></p>
+    <div class="confirm-actions">
+      <button id="confirmCancel" type="button" class="gray">取消</button>
+      <button id="confirmOk" type="button" class="danger">确认</button>
+    </div>
+  </section>
+</div>
+
 <script src="/socket.io/socket.io.js"></script>
 <script src="/static/js/app.js"></script>
 {% block scripts %}{% endblock %}

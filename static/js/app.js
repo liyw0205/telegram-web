@@ -10,6 +10,9 @@ const DOWNLOAD_FILE_LIMIT = 30;
 let GALLERY_ITEMS = [];
 let GALLERY_INDEX = 0;
 const SHOW_META = false;
+let pendingConfirm = null;
+let confirmDialogBound = false;
+let confirmLastFocus = null;
 
 const THUMB_CACHE = new Map(); // key: `${peer}:${msgId}` -> url|null
 const URL_TOKEN = new URLSearchParams(location.search).get("token") || "";
@@ -26,8 +29,51 @@ function toast(text){
   box.appendChild(item); setTimeout(() => item.remove(), 2400);
 }
 
+function bindConfirmDialog(){
+  if (confirmDialogBound) return;
+  const overlay = $("confirmOverlay"), ok = $("confirmOk"), cancel = $("confirmCancel");
+  if (!overlay || !ok || !cancel) return;
+  confirmDialogBound = true;
+  ok.addEventListener("click", () => closeSensitiveConfirm(true));
+  cancel.addEventListener("click", () => closeSensitiveConfirm(false));
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) closeSensitiveConfirm(false);
+  });
+}
+
+function handleConfirmKeydown(event){
+  if (!pendingConfirm || event.key !== "Escape") return;
+  event.preventDefault();
+  closeSensitiveConfirm(false);
+}
+
+function closeSensitiveConfirm(result){
+  if (!pendingConfirm) return;
+  const current = pendingConfirm;
+  pendingConfirm = null;
+  const overlay = $("confirmOverlay");
+  if (overlay) {
+    overlay.classList.remove("show");
+    overlay.hidden = true;
+  }
+  document.removeEventListener("keydown", handleConfirmKeydown);
+  current.resolve(result);
+  if (confirmLastFocus && typeof confirmLastFocus.focus === "function") confirmLastFocus.focus();
+  confirmLastFocus = null;
+}
+
 function confirmSensitive(message){
-  return confirm(message);
+  const overlay = $("confirmOverlay"), text = $("confirmMessage"), ok = $("confirmOk"), cancel = $("confirmCancel");
+  if (!overlay || !text || !ok || !cancel) return Promise.resolve(confirm(message));
+  bindConfirmDialog();
+  if (pendingConfirm) closeSensitiveConfirm(false);
+  text.textContent = message;
+  overlay.hidden = false;
+  overlay.classList.add("show");
+  confirmLastFocus = document.activeElement || null;
+  document.addEventListener("keydown", handleConfirmKeydown);
+  setTimeout(() => cancel.focus(), 0);
+  return new Promise((resolve) => { pendingConfirm = { resolve }; });
 }
 
 function withQuery(path, params){
@@ -179,14 +225,14 @@ async function submitPassword(){
   catch(e){ toast(e.message); }
 }
 async function logoutTelegram(){
-  if (!confirmSensitive("确认退出 Telegram 登录？这会断开当前账号会话。")) return;
+  if (!(await confirmSensitive("确认退出 Telegram 登录？这会断开当前账号会话。"))) return;
   try{ await api("/api/logout", { method:"POST", body:"{}" }); toast("已退出登录"); refreshStatus(); }
   catch(e){ toast(e.message); }
 }
 async function importStringSession(){
   const value = $("string_session")?.value.trim();
   if (!value) return toast("请先粘贴 StringSession");
-  if (!confirmSensitive("确认导入 StringSession？当前客户端会重置并切换到导入的会话。")) return;
+  if (!(await confirmSensitive("确认导入 StringSession？当前客户端会重置并切换到导入的会话。"))) return;
   try{
     await api("/api/session/string", { method:"POST", body: JSON.stringify({ string_session: value }) });
     $("string_session").value = "";
@@ -195,7 +241,7 @@ async function importStringSession(){
   } catch(e){ toast(e.message); }
 }
 async function exportStringSession(){
-  if (!confirmSensitive("确认导出 StringSession？导出的文本可直接登录此 Telegram 账号。")) return;
+  if (!(await confirmSensitive("确认导出 StringSession？导出的文本可直接登录此 Telegram 账号。"))) return;
   try{
     const token = await createSessionExportToken("string");
     const data = await api(withQuery("/api/session/string", { export_token: token.export_token }));
@@ -209,7 +255,7 @@ async function exportStringSession(){
 async function importSessionFile(){
   const file = $("sessionFileInput")?.files?.[0];
   if (!file) return toast("请选择 .session 文件");
-  if (!confirmSensitive("确认导入 .session 文件？当前客户端会重置并切换到导入的会话。")) return;
+  if (!(await confirmSensitive("确认导入 .session 文件？当前客户端会重置并切换到导入的会话。"))) return;
   const fd = new FormData();
   fd.append("file", file);
   try{
@@ -220,7 +266,7 @@ async function importSessionFile(){
   } catch(e){ toast(e.message); }
 }
 async function exportSessionFile(){
-  if (!confirmSensitive("确认导出 .session 文件？该文件可直接登录此 Telegram 账号。")) return;
+  if (!(await confirmSensitive("确认导出 .session 文件？该文件可直接登录此 Telegram 账号。"))) return;
   try{
     const token = await createSessionExportToken("file");
     window.open(withQuery("/api/session/file", { export_token: token.export_token, token: URL_TOKEN }), "_blank", "noopener");
@@ -608,7 +654,7 @@ async function taskResume(id){ try{ await api(`/api/task/${id}/resume`, { method
 async function taskDelete(id, status = ""){
   const active = ["queued", "running", "paused"].includes(status);
   const text = active ? "确认取消这个下载/预览任务？" : "确认移除这条任务记录？";
-  if (!confirmSensitive(text)) return;
+  if (!(await confirmSensitive(text))) return;
   try{
     await api(`/api/task/${id}`, { method:"DELETE" });
     await Promise.allSettled([loadDownloadTasks(), loadDownloadFiles(true)]);
