@@ -309,6 +309,21 @@ class FlaskBoundaryTest(unittest.TestCase):
             self.assertEqual(response.status_code, 200, path)
             self.assertIn("Web Telegram", response.get_data(as_text=True))
 
+    def test_diagnostics_page_has_accessible_status_semantics(self):
+        response = self.client.get("/diagnostics")
+        self.addCleanup(response.close)
+        html = response.get_data(as_text=True)
+        for fragment in (
+            'aria-labelledby="diagnosticsTitle"',
+            'id="diagnosticsSummary" class="diagnostics-summary" role="status" aria-live="polite" aria-atomic="true" aria-busy="true"',
+            'aria-label="刷新诊断状态"',
+            'id="diagnosticsConfig" class="diagnostics-list" role="list" aria-labelledby="diagnosticsConfigTitle" aria-busy="true"',
+            'id="diagnosticsAuth" class="diagnostics-list" role="list" aria-labelledby="diagnosticsAuthTitle" aria-busy="true"',
+            'id="diagnosticsRuntime" class="diagnostics-list" role="list" aria-labelledby="diagnosticsRuntimeTitle" aria-busy="true"',
+            'id="diagnosticsPaths" class="diagnostics-list" role="list" aria-labelledby="diagnosticsPathsTitle" aria-busy="true"',
+        ):
+            self.assertIn(fragment, html)
+
     def test_non_object_json_returns_400(self):
         response = self.client.post("/api/send", json=[])
         self.assertEqual(response.status_code, 400)

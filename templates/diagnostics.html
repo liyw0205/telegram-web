@@ -1,24 +1,24 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="mobile-panel">
+<section class="mobile-panel" aria-labelledby="diagnosticsTitle">
   <div class="page-title-row">
-    <div><h1>诊断</h1><p>只读运行状态和脱敏配置检查</p></div>
-    <button class="round-btn" onclick="loadDiagnosticsPage()">↻</button>
+    <div><h1 id="diagnosticsTitle">诊断</h1><p>只读运行状态和脱敏配置检查</p></div>
+    <button class="round-btn" onclick="loadDiagnosticsPage()" aria-label="刷新诊断状态" title="刷新诊断状态">↻</button>
   </div>
 
-  <div id="diagnosticsSummary" class="diagnostics-summary">加载中...</div>
+  <div id="diagnosticsSummary" class="diagnostics-summary" role="status" aria-live="polite" aria-atomic="true" aria-busy="true">加载中...</div>
 
-  <h2 class="section-title">配置</h2>
-  <div id="diagnosticsConfig" class="diagnostics-list"></div>
+  <h2 id="diagnosticsConfigTitle" class="section-title">配置</h2>
+  <div id="diagnosticsConfig" class="diagnostics-list" role="list" aria-labelledby="diagnosticsConfigTitle" aria-busy="true"></div>
 
-  <h2 class="section-title">访问</h2>
-  <div id="diagnosticsAuth" class="diagnostics-list"></div>
+  <h2 id="diagnosticsAuthTitle" class="section-title">访问</h2>
+  <div id="diagnosticsAuth" class="diagnostics-list" role="list" aria-labelledby="diagnosticsAuthTitle" aria-busy="true"></div>
 
-  <h2 class="section-title">运行</h2>
-  <div id="diagnosticsRuntime" class="diagnostics-list"></div>
+  <h2 id="diagnosticsRuntimeTitle" class="section-title">运行</h2>
+  <div id="diagnosticsRuntime" class="diagnostics-list" role="list" aria-labelledby="diagnosticsRuntimeTitle" aria-busy="true"></div>
 
-  <h2 class="section-title">目录</h2>
-  <div id="diagnosticsPaths" class="diagnostics-list"></div>
+  <h2 id="diagnosticsPathsTitle" class="section-title">目录</h2>
+  <div id="diagnosticsPaths" class="diagnostics-list" role="list" aria-labelledby="diagnosticsPathsTitle" aria-busy="true"></div>
 </section>
 {% endblock %}
 {% block scripts %}<script>loadDiagnosticsPage();</script>{% endblock %}

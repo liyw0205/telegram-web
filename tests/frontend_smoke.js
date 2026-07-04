@@ -91,6 +91,7 @@ function createClassList() {
 
 function createElementState(initial = {}) {
   const listeners = new Map();
+  const attributes = new Map();
   return {
     value: "",
     placeholder: "",
@@ -103,6 +104,9 @@ function createElementState(initial = {}) {
     classList: createClassList(),
     appendChild(item) { this.appended.push(item); },
     insertAdjacentHTML(_position, html) { this.innerHTML += html; },
+    setAttribute(name, value) { attributes.set(name, String(value)); },
+    getAttribute(name) { return attributes.has(name) ? attributes.get(name) : null; },
+    removeAttribute(name) { attributes.delete(name); },
     addEventListener(type, handler) {
       if (!listeners.has(type)) listeners.set(type, []);
       listeners.get(type).push(handler);
@@ -651,7 +655,12 @@ async function testDiagnosticsPageRendersRedactedStatusOnly() {
 
   assert.strictEqual(harness.calls.fetch[0].path, "/api/diagnostics");
   assert.strictEqual(textOf(harness, "diagnosticsSummary"), "Web Token 已启用 · 环境变量 · 本机监听 · 5000");
+  assert(harness.elements.get("diagnosticsSummary").classList.contains("ok"));
+  assert(!harness.elements.get("diagnosticsSummary").classList.contains("warn"));
+  assert.strictEqual(harness.elements.get("diagnosticsSummary").getAttribute("aria-busy"), "false");
+  assert.strictEqual(harness.elements.get("diagnosticsConfig").getAttribute("aria-busy"), "false");
   expectHtmlIncludes(harness, "diagnosticsConfig", ["api_hash", "已保存，含凭据", "StringSession", "缓存上限(MB)", "1024"]);
+  expectHtmlIncludes(harness, "diagnosticsConfig", ["role=\"listitem\"", "aria-label=\"配置文件：是\""]);
   expectHtmlIncludes(harness, "diagnosticsAuth", ["Web Token", "Token 来源", "环境变量"]);
   expectHtmlIncludes(harness, "diagnosticsRuntime", ["监听范围", "本机", "Port", "5000"]);
   expectHtmlIncludes(harness, "diagnosticsPaths", ["data", "Download", "Pictures"]);
@@ -685,6 +694,10 @@ async function testDiagnosticsPageShowsErrorSummaryAndToast() {
   await harness.context.loadDiagnosticsPage();
 
   assert.strictEqual(textOf(harness, "diagnosticsSummary"), "诊断接口失败");
+  assert(harness.elements.get("diagnosticsSummary").classList.contains("warn"));
+  assert(!harness.elements.get("diagnosticsSummary").classList.contains("ok"));
+  assert.strictEqual(harness.elements.get("diagnosticsSummary").getAttribute("aria-busy"), "false");
+  assert.strictEqual(harness.elements.get("diagnosticsConfig").getAttribute("aria-busy"), "false");
   assert(harness.calls.toast.includes("诊断接口失败"));
   assert.strictEqual(htmlOf(harness, "diagnosticsConfig"), "");
   assert.strictEqual(htmlOf(harness, "diagnosticsAuth"), "");

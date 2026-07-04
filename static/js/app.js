@@ -149,17 +149,38 @@ function boolText(value){ return value ? "是" : "否"; }
 function authSourceText(value){ return value === "environment" ? "环境变量" : value === "config" ? "配置文件" : "未启用"; }
 function runtimeScopeText(runtime){ return runtime && runtime.loopback ? "本机监听" : "对外监听"; }
 function runtimePortText(runtime){ return runtime && runtime.port_valid ? String(runtime.port) : "无效"; }
+function diagnosticsValueText(value){ return typeof value === "boolean" ? boolText(value) : String(value ?? "-"); }
+function setAriaBusy(id, busy){
+  const el = $(id);
+  if (el && typeof el.setAttribute === "function") el.setAttribute("aria-busy", busy ? "true" : "false");
+}
+function setDiagnosticsState(state){
+  const summary = $("diagnosticsSummary");
+  if (summary) {
+    summary.classList.remove("ok", "warn");
+    if (state === "ok") summary.classList.add("ok");
+    if (state === "error") summary.classList.add("warn");
+  }
+  const busy = state === "loading";
+  ["diagnosticsSummary", "diagnosticsConfig", "diagnosticsAuth", "diagnosticsRuntime", "diagnosticsPaths"].forEach(id => setAriaBusy(id, busy));
+}
 function renderDiagnosticsValue(value, isOk = null){
-  const text = typeof value === "boolean" ? boolText(value) : String(value ?? "-");
+  const text = diagnosticsValueText(value);
   const cls = isOk === null ? "" : (isOk ? " ok" : " warn");
   return `<span class="diagnostics-value${cls}">${escapeHtml(text)}</span>`;
 }
 function renderDiagnosticsRows(id, rows){
   const box = $(id); if (!box) return;
-  box.innerHTML = rows.map(row => `<div class="diagnostics-row"><span class="diagnostics-label">${escapeHtml(row[0])}</span>${renderDiagnosticsValue(row[1], row[2])}</div>`).join("");
+  box.innerHTML = rows.map(row => {
+    const label = String(row[0] ?? "");
+    const value = diagnosticsValueText(row[1]);
+    return `<div class="diagnostics-row" role="listitem" aria-label="${escapeHtml(label)}：${escapeHtml(value)}"><span class="diagnostics-label">${escapeHtml(label)}</span>${renderDiagnosticsValue(row[1], row[2])}</div>`;
+  }).join("");
 }
 async function loadDiagnosticsPage(){
   const summary = $("diagnosticsSummary");
+  setDiagnosticsState("loading");
+  if (summary) summary.textContent = "加载中...";
   try{
     const d = await api("/api/diagnostics");
     const cfg = d.config || {}, auth = d.web_auth || {}, runtime = d.runtime || {}, paths = d.paths || {};
@@ -196,11 +217,13 @@ async function loadDiagnosticsPage(){
       ["uploads", paths.upload_dir_exists, paths.upload_dir_exists],
       ["task-history", paths.task_history_exists, null],
     ]);
+    setDiagnosticsState("ok");
   } catch(e){
     if (summary) summary.textContent = e.message;
     ["diagnosticsConfig", "diagnosticsAuth", "diagnosticsRuntime", "diagnosticsPaths"].forEach(id => {
       const box = $(id); if (box) box.innerHTML = "";
     });
+    setDiagnosticsState("error");
     toast(e.message);
   }
 }
