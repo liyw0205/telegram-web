@@ -1,46 +1,46 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="chat-page" data-peer="{{ peer }}">
+<section class="chat-page" data-peer="{{ peer }}" aria-labelledby="chatTitle">
   <div class="chat-header">
-    <button class="back-btn" onclick="location.href='/chats'">‹</button>
+    <button class="back-btn" type="button" onclick="location.href='/chats'" aria-label="返回会话列表">‹</button>
     <div>
-      <div class="chat-title">{{ peer }}</div>
+      <div class="chat-title" id="chatTitle">{{ peer }}</div>
       <div class="chat-peer">{{ peer }}</div>
     </div>
-    <button class="round-btn" onclick="loadMessages()">↻</button>
+    <button class="round-btn" type="button" onclick="loadMessages()" aria-label="刷新消息" title="刷新消息">↻</button>
   </div>
 
-  <div id="messageList" class="message-list"></div>
+  <div id="messageList" class="message-list" role="log" aria-label="消息列表" aria-live="polite" aria-relevant="additions text" aria-busy="true"></div>
 
-  <div class="composer-mini">
-    <button onclick="toggleComposer('textComposer')">文字</button>
-    <button onclick="toggleComposer('fileComposer')">媒体/文件</button>
-    <button class="gray" onclick="loadOlderMessages()">更早</button>
+  <div class="composer-mini" role="group" aria-label="消息操作">
+    <button type="button" data-composer-target="textComposer" onclick="toggleComposer('textComposer')" aria-controls="textComposer" aria-expanded="false">文字</button>
+    <button type="button" data-composer-target="fileComposer" onclick="toggleComposer('fileComposer')" aria-controls="fileComposer" aria-expanded="false">媒体/文件</button>
+    <button class="gray" type="button" onclick="loadOlderMessages()" aria-controls="messageList" aria-label="加载更早消息">更早</button>
   </div>
 
-  <div id="textComposer" class="composer-panel">
-    <textarea id="messageInput" placeholder="输入消息（支持 Markdown）"></textarea>
-    <button onclick="sendText()">发送消息</button>
+  <div id="textComposer" class="composer-panel" role="region" aria-label="文字消息发送区" aria-hidden="true" aria-busy="false">
+    <textarea id="messageInput" placeholder="输入消息（支持 Markdown）" aria-label="消息内容"></textarea>
+    <button type="button" onclick="sendText()">发送消息</button>
   </div>
 
-  <div id="fileComposer" class="composer-panel">
-    <input id="sendFileInput" type="file">
-    <input id="captionInput" placeholder="说明文字，可选">
-    <button class="green" onclick="sendFile()">发送媒体/文件</button>
+  <div id="fileComposer" class="composer-panel" role="region" aria-label="媒体或文件发送区" aria-hidden="true" aria-busy="false">
+    <input id="sendFileInput" type="file" aria-label="选择要发送的媒体或文件">
+    <input id="captionInput" placeholder="说明文字，可选" aria-label="媒体或文件说明文字" autocomplete="off">
+    <button class="green" type="button" onclick="sendFile()">发送媒体/文件</button>
   </div>
 </section>
 
-<div id="mediaViewer" class="media-viewer">
+<div id="mediaViewer" class="media-viewer" role="dialog" aria-modal="true" aria-labelledby="viewerTitle" aria-describedby="viewerIndex">
   <div class="viewer-top">
-    <div><b id="viewerTitle">媒体</b><span id="viewerIndex">1 / 1</span></div>
+    <div><b id="viewerTitle">媒体</b><span id="viewerIndex" aria-live="polite" aria-atomic="true">1 / 1</span></div>
     <div class="viewer-right">
-      <button id="viewerDownload" class="viewer-btn">⬇</button>
-      <button id="viewerClose" class="viewer-btn">✕</button>
+      <button id="viewerDownload" class="viewer-btn" type="button" aria-label="下载当前媒体">⬇</button>
+      <button id="viewerClose" class="viewer-btn" type="button" aria-label="关闭媒体查看器">✕</button>
     </div>
   </div>
-  <button id="viewerPrev" class="viewer-nav left">‹</button>
+  <button id="viewerPrev" class="viewer-nav left" type="button" aria-label="上一项媒体">‹</button>
   <div id="viewerBody" class="viewer-body"></div>
-  <button id="viewerNext" class="viewer-nav right">›</button>
+  <button id="viewerNext" class="viewer-nav right" type="button" aria-label="下一项媒体">›</button>
 </div>
 {% endblock %}
 {% block scripts %}<script>initSingleChatPage("{{ peer }}");</script>{% endblock %}

@@ -48,7 +48,7 @@
 | `templates/diagnostics.html` | 只读脱敏诊断页面 |
 | `static/js/app.js` | 前端 API 封装、Socket.IO、会话/消息/媒体/下载交互 |
 | `static/css/app.css` | 全站样式和移动端布局 |
-| `tests/frontend_smoke.js` | 纯 Node 前端行为 smoke，按确认弹窗、媒体查看器、登录页/API、session/任务确认、下载页和诊断页分组，在 mock 浏览器环境验证自定义敏感确认、键盘焦点循环、媒体查看器键盘交互和焦点循环、导出令牌、API 错误、登录页配置、下载页状态和诊断页脱敏渲染 |
+| `tests/frontend_smoke.js` | 纯 Node 前端行为 smoke，按确认弹窗、媒体查看器、聊天消息、登录页/API、session/任务确认、下载页和诊断页分组，在 mock 浏览器环境验证自定义敏感确认、键盘焦点循环、媒体查看器键盘交互和焦点循环、聊天消息状态、导出令牌、API 错误、登录页配置、下载页状态和诊断页脱敏渲染 |
 | `docs/browser-smoke.md` | 真实浏览器手动 smoke 验证清单和后续 Playwright 引入边界 |
 | `scripts/check-browser-smoke-env.sh` | 检查当前 shell 是否具备浏览器自动化 smoke 条件，不安装依赖 |
 | `docs/runtime-runbook.md` | 启动、访问、日志观察、Web Token 和常见故障排查清单 |
@@ -502,3 +502,5 @@ rg -n "api\\(|fetch\\(|io\\(|/api/|socket|downloadMedia|prepareMedia|send" stati
 2026-07-05：Phase 23 为顶部连接状态、刷新按钮和 toast 容器补充 live/status 语义，`refreshStatus()` 增加动态 `aria-busy`，并补充全局反馈静态测试和纯 Node smoke。
 
 2026-07-05：Phase 24 为下载页任务列表、文件列表、分页状态和刷新/加载按钮补充可访问性语义，下载刷新流程增加动态 `aria-busy`/`aria-disabled`，并补充下载页静态测试和纯 Node smoke。
+
+2026-07-05：Phase 25 为聊天页消息列表、文字/文件发送区和媒体查看器补充可访问性语义，消息加载和发送流程增加动态 `aria-busy`/`aria-hidden`，并补充聊天页静态测试和纯 Node smoke。

@@ -232,8 +232,13 @@ async function loadDiagnosticsPage(){
 function toggleFold(id){ $(id)?.classList.toggle("show"); }
 function toggleComposer(id){
   document.querySelectorAll(".composer-panel").forEach(el => {
-    if (el.id === id) el.classList.toggle("show");
-    else el.classList.remove("show");
+    const show = el.id === id ? el.classList.toggle("show") : false;
+    if (el.id !== id) el.classList.remove("show");
+    if (typeof el.setAttribute === "function") el.setAttribute("aria-hidden", show ? "false" : "true");
+  });
+  document.querySelectorAll("[data-composer-target]").forEach(button => {
+    const expanded = button.getAttribute("data-composer-target") === id && $(id)?.classList.contains("show");
+    if (typeof button.setAttribute === "function") button.setAttribute("aria-expanded", expanded ? "true" : "false");
   });
 }
 
@@ -438,14 +443,32 @@ function messageBaseHtml(m){
   const text = m.text ? `<div class="msg-text">${renderMarkdownSafe(m.text)}</div>` : "";
   return meta + text;
 }
+function messageAriaLabel(m, mediaCount = 0){
+  const direction = m.out ? "已发送消息" : "收到消息";
+  const media = mediaCount > 1 ? `，包含 ${mediaCount} 个媒体` : (m.has_media ? "，包含媒体" : "");
+  return direction + media;
+}
+function decorateMessageElement(el, m, mediaCount = 0){
+  if (!el || typeof el.setAttribute !== "function") return;
+  el.setAttribute("role", "article");
+  el.setAttribute("aria-label", messageAriaLabel(m, mediaCount));
+}
+function mediaDownloadButtonHtml(msgId){
+  return `<button class="media-download-btn" type="button" aria-label="下载媒体 ${msgId}" onclick="event.stopPropagation(); downloadMedia(${msgId})">⬇</button>`;
+}
 async function loadMessages(){
   if (!CURRENT_PEER) return;
   const box = $("messageList");
-  box.innerHTML = `<div class="empty">加载消息中...</div>`;
+  if (!box) return;
+  setAriaBusy(box, true);
+  box.innerHTML = `<div class="empty" role="status">加载消息中...</div>`;
   try{
     const msgs = await api("/api/messages?peer=" + encodeURIComponent(CURRENT_PEER) + "&limit=80");
     box.innerHTML = "";
-    if (!msgs.length) return box.innerHTML = `<div class="empty">暂无消息</div>`;
+    if (!msgs.length) {
+      box.innerHTML = `<div class="empty" role="status">暂无消息</div>`;
+      return;
+    }
     OLDEST_MSG_ID = msgs[0]?.id || 0;
     const blocks = buildRenderBlocks(msgs);
     for (const b of blocks) {
@@ -453,15 +476,21 @@ async function loadMessages(){
       else appendMediaGroupBlock(b.items, false);
     }
     box.scrollTop = box.scrollHeight;
-  } catch(e){ box.innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`; }
+  } catch(e){
+    box.innerHTML = `<div class="empty" role="status">${escapeHtml(e.message)}</div>`;
+  } finally {
+    setAriaBusy(box, false);
+  }
 }
 async function loadOlderMessages(){
   if (!CURRENT_PEER || !OLDEST_MSG_ID) return;
+  const box = $("messageList");
+  setAriaBusy(box, true);
   try{
     const msgs = await api(`/api/messages?peer=${encodeURIComponent(CURRENT_PEER)}&limit=40&offset_id=${encodeURIComponent(OLDEST_MSG_ID)}`);
     if (!msgs.length) return toast("没有更早消息");
     OLDEST_MSG_ID = msgs[0]?.id || OLDEST_MSG_ID;
-    const box = $("messageList"); const oldHeight = box.scrollHeight;
+    const oldHeight = box.scrollHeight;
     const blocks = buildRenderBlocks(msgs);
     for (let i = blocks.length - 1; i >= 0; i--) {
       const b = blocks[i];
@@ -470,6 +499,7 @@ async function loadOlderMessages(){
     }
     box.scrollTop = box.scrollHeight - oldHeight;
   } catch(e){ toast(e.message); }
+  finally { setAriaBusy(box, false); }
 }
 function appendSingleMessageBlock(m, scroll = true){
   const box = $("messageList"); if (!box) return;
@@ -477,13 +507,14 @@ function appendSingleMessageBlock(m, scroll = true){
 
   const div = document.createElement("div");
   div.className = "message " + (m.out ? "out " : "") + (m.has_media ? "has-media" : "");
+  decorateMessageElement(div, m);
   div.dataset.msgId = m.id;
   div.innerHTML = `
     ${messageBaseHtml(m)}
     ${m.has_media ? `
       <div class="media-cluster" id="cluster-${m.id}">
         <div class="media-cell loading" data-msg-id="${m.id}">
-          <button class="media-download-btn" onclick="event.stopPropagation(); downloadMedia(${m.id})">⬇</button>
+          ${mediaDownloadButtonHtml(m.id)}
           <div class="media-placeholder">加载预览...</div>
         </div>
       </div>` : ""}
@@ -512,13 +543,14 @@ function prependSingleMessageBlock(m){
 
   const div = document.createElement("div");
   div.className = "message " + (m.out ? "out " : "") + (m.has_media ? "has-media" : "");
+  decorateMessageElement(div, m);
   div.dataset.msgId = m.id;
   div.innerHTML = `
     ${messageBaseHtml(m)}
     ${m.has_media ? `
       <div class="media-cluster" id="cluster-${m.id}">
         <div class="media-cell loading" data-msg-id="${m.id}">
-          <button class="media-download-btn" onclick="event.stopPropagation(); downloadMedia(${m.id})">⬇</button>
+          ${mediaDownloadButtonHtml(m.id)}
           <div class="media-placeholder">加载预览...</div>
         </div>
       </div>` : ""}
@@ -547,6 +579,7 @@ function appendMediaGroupBlock(items, scroll = true){
 
   const div = document.createElement("div");
   div.className = "message " + (first.out ? "out " : "") + "has-media";
+  decorateMessageElement(div, first, items.length);
   div.dataset.msgId = "group-" + mainId;
   div.innerHTML = `
     ${SHOW_META ? `<div class="msg-meta">${escapeHtml(first.date || "")} · 媒体集(${items.length})</div>` : ""}
@@ -554,7 +587,7 @@ function appendMediaGroupBlock(items, scroll = true){
     <div class="media-cluster media-grid" id="cluster-group-${mainId}">
       ${items.map((x) => `
         <div class="media-cell loading" data-msg-id="${x.id}">
-          <button class="media-download-btn" onclick="event.stopPropagation(); downloadMedia(${x.id})">⬇</button>
+          ${mediaDownloadButtonHtml(x.id)}
           <div class="media-placeholder">加载预览...</div>
         </div>
       `).join("")}
@@ -585,6 +618,7 @@ function prependMediaGroupBlock(items){
 
   const div = document.createElement("div");
   div.className = "message " + (first.out ? "out " : "") + "has-media";
+  decorateMessageElement(div, first, items.length);
   div.dataset.msgId = "group-" + mainId;
   div.innerHTML = `
     ${SHOW_META ? `<div class="msg-meta">${escapeHtml(first.date || "")} · 媒体集(${items.length})</div>` : ""}
@@ -592,7 +626,7 @@ function prependMediaGroupBlock(items){
     <div class="media-cluster media-grid" id="cluster-group-${mainId}">
       ${items.map((x) => `
         <div class="media-cell loading" data-msg-id="${x.id}">
-          <button class="media-download-btn" onclick="event.stopPropagation(); downloadMedia(${x.id})">⬇</button>
+          ${mediaDownloadButtonHtml(x.id)}
           <div class="media-placeholder">加载预览...</div>
         </div>
       `).join("")}
@@ -621,12 +655,12 @@ async function loadThumbIntoCell(cell, msg) {
     cell.classList.remove("loading");
     if (cachedUrl) {
       cell.innerHTML = `
-        <button class="media-download-btn" onclick="event.stopPropagation(); downloadMedia(${msg.id})">⬇</button>
+        ${mediaDownloadButtonHtml(msg.id)}
         <img src="${escapeHtml(cachedUrl)}" class="media-thumb" loading="lazy">
       `;
     } else {
       cell.innerHTML = `
-        <button class="media-download-btn" onclick="event.stopPropagation(); downloadMedia(${msg.id})">⬇</button>
+        ${mediaDownloadButtonHtml(msg.id)}
         <div class="media-file-thumb">📄 无预览</div>
       `;
     }
@@ -644,13 +678,13 @@ async function loadThumbIntoCell(cell, msg) {
     if (d?.ready && d?.url) {
       THUMB_CACHE.set(k, d.url);
       cell.innerHTML = `
-        <button class="media-download-btn" onclick="event.stopPropagation(); downloadMedia(${msg.id})">⬇</button>
+        ${mediaDownloadButtonHtml(msg.id)}
         <img src="${escapeHtml(d.url)}" class="media-thumb" loading="lazy">
       `;
     } else {
       THUMB_CACHE.set(k, null);
       cell.innerHTML = `
-        <button class="media-download-btn" onclick="event.stopPropagation(); downloadMedia(${msg.id})">⬇</button>
+        ${mediaDownloadButtonHtml(msg.id)}
         <div class="media-file-thumb">📄 无预览</div>
       `;
     }
@@ -658,13 +692,13 @@ async function loadThumbIntoCell(cell, msg) {
     THUMB_CACHE.set(k, null);
     cell.classList.remove("loading");
     cell.innerHTML = `
-      <button class="media-download-btn" onclick="event.stopPropagation(); downloadMedia(${msg.id})">⬇</button>
+      ${mediaDownloadButtonHtml(msg.id)}
       <div class="media-file-thumb">📄 无预览</div>
     `;
   }
 }
 function mediaCellHtml(item, order = 0, total = 0){
-  return `<div class="media-cell ready" data-msg-id="${item.msgId}"><button class="media-download-btn" onclick="event.stopPropagation(); downloadMedia(${item.msgId})">⬇</button>${renderMediaPreviewNode(item.url, item.mime)}${total > 1 ? `<div class="media-index">${order}/${total}</div>` : ""}</div>`;
+  return `<div class="media-cell ready" data-msg-id="${item.msgId}">${mediaDownloadButtonHtml(item.msgId)}${renderMediaPreviewNode(item.url, item.mime)}${total > 1 ? `<div class="media-index">${order}/${total}</div>` : ""}</div>`;
 }
 function renderMediaPreviewNode(url, mime){
   if (mime.startsWith("image/")) return `<img src="${escapeHtml(url)}" class="media-thumb" loading="lazy">`;
@@ -786,17 +820,23 @@ async function sendText(){
   if (!CURRENT_PEER) return;
   const text = $("messageInput").value;
   if (!text.trim()) return;
+  const panel = $("textComposer");
+  setAriaBusy(panel, true);
   try{
     const msg = await api("/api/send", { method:"POST", body: JSON.stringify({ peer: CURRENT_PEER, text }) });
     $("messageInput").value = "";
     appendSingleMessageBlock(msg, true);
     $("textComposer").classList.remove("show");
+    if (panel && typeof panel.setAttribute === "function") panel.setAttribute("aria-hidden", "true");
   } catch(e){ toast(e.message); }
+  finally { setAriaBusy(panel, false); }
 }
 async function sendFile(){
   if (!CURRENT_PEER) return;
   const file = $("sendFileInput")?.files?.[0];
   if (!file) return toast("请选择文件");
+  const panel = $("fileComposer");
+  setAriaBusy(panel, true);
   const fd = new FormData();
   fd.append("peer", CURRENT_PEER);
   fd.append("caption", $("captionInput").value || "");
@@ -804,8 +844,10 @@ async function sendFile(){
   try{
     const msg = await api("/api/send-file", { method:"POST", body: fd });
     $("sendFileInput").value = ""; $("captionInput").value = ""; $("fileComposer").classList.remove("show");
+    if (panel && typeof panel.setAttribute === "function") panel.setAttribute("aria-hidden", "true");
     appendSingleMessageBlock(msg, true);
   } catch(e){ toast(e.message); }
+  finally { setAriaBusy(panel, false); }
 }
 
 /* 下载 */

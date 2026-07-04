@@ -50,6 +50,15 @@ const DIAGNOSTICS_ELEMENT_IDS = [
   "diagnosticsPaths",
 ];
 
+const CHAT_ELEMENT_IDS = [
+  "messageList",
+  "messageInput",
+  "textComposer",
+  "sendFileInput",
+  "captionInput",
+  "fileComposer",
+];
+
 const CONFIRM_ELEMENT_IDS = [
   "confirmMessage",
   "confirmOk",
@@ -73,6 +82,7 @@ const DEFAULT_ELEMENT_IDS = [
   ...LOGIN_ELEMENT_IDS,
   ...DOWNLOAD_ELEMENT_IDS,
   ...DIAGNOSTICS_ELEMENT_IDS,
+  ...CHAT_ELEMENT_IDS,
   ...CONFIRM_ELEMENT_IDS,
   ...GALLERY_ELEMENT_IDS,
 ];
@@ -107,9 +117,15 @@ function createElementState(initial = {}) {
     hidden: false,
     disabled: false,
     appended: [],
+    dataset: {},
+    scrollHeight: 0,
+    scrollTop: 0,
     classList: createClassList(),
     appendChild(item) { this.appended.push(item); },
     insertAdjacentHTML(_position, html) { this.innerHTML += html; },
+    insertBefore(item) { this.appended.unshift(item); },
+    querySelector() { return null; },
+    querySelectorAll() { return []; },
     setAttribute(name, value) { attributes.set(name, String(value)); },
     getAttribute(name) { return attributes.has(name) ? attributes.get(name) : null; },
     removeAttribute(name) { attributes.delete(name); },
@@ -199,12 +215,16 @@ function createHarness({ confirmResult = true, search = "", routes = {} } = {}) 
   elements.set("confirmOverlay", createElementState({ hidden: true }));
   elements.set("downloadFileMore", createElementState({ style: { display: "none" } }));
   elements.set("toast", createElementState({ appendChild(item) { calls.toast.push(item.textContent); } }));
+  elements.set("sendFileInput", createElementState({ files: [] }));
 
   const context = {
     console,
     URL,
     URLSearchParams,
-    FormData: class FormData {},
+    FormData: class FormData {
+      constructor() { this.fields = []; }
+      append(name, value) { this.fields.push([name, value]); }
+    },
     setTimeout(fn) { return fn(); },
     alert(text) { calls.toast.push(text); },
     confirm(message) { calls.confirm.push(message); return confirmResult; },
@@ -362,6 +382,30 @@ async function testGalleryKeyboardNavigationAndFocusRestore() {
   assert(!harness.elements.get("mediaViewer").classList.contains("show"));
   expectFocused(harness, "galleryTrigger");
   expectPreventedKeys(harness, ["ArrowRight", "ArrowLeft", "Escape"]);
+}
+
+async function testChatMessageLoadAndSendUseAccessibleState() {
+  const harness = createHarness({
+    routes: {
+      "/api/messages": [
+        { id: 1, text: "hello", out: false },
+      ],
+      "/api/send": { id: 2, text: "sent", out: true },
+    },
+  });
+
+  await harness.context.initSingleChatPage("peer-1");
+  assert.strictEqual(harness.elements.get("messageList").getAttribute("aria-busy"), "false");
+  assert.strictEqual(harness.elements.get("messageList").appended[0].getAttribute("role"), "article");
+  assert.strictEqual(harness.elements.get("messageList").appended[0].getAttribute("aria-label"), "收到消息");
+
+  harness.elements.get("messageInput").value = "sent";
+  await harness.context.sendText();
+
+  assert.strictEqual(harness.calls.fetch.some((call) => call.path === "/api/send"), true);
+  assert.strictEqual(harness.elements.get("textComposer").getAttribute("aria-busy"), "false");
+  assert.strictEqual(harness.elements.get("textComposer").getAttribute("aria-hidden"), "true");
+  assert.strictEqual(harness.elements.get("messageList").appended.at(-1).getAttribute("aria-label"), "已发送消息");
 }
 
 async function testGalleryFocusTrapCyclesWithinViewerControls() {
@@ -752,6 +796,12 @@ const TEST_GROUPS = [
       testGalleryKeyboardNavigationAndFocusRestore,
       testGalleryFocusTrapCyclesWithinViewerControls,
       testGalleryKeyboardIgnoresKeysWhileConfirmIsOpen,
+    ],
+  },
+  {
+    name: "chat messages",
+    tests: [
+      testChatMessageLoadAndSendUseAccessibleState,
     ],
   },
   {

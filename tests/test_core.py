@@ -339,6 +339,34 @@ class FlaskBoundaryTest(unittest.TestCase):
         ):
             self.assertIn(fragment, html)
 
+    def test_chat_page_has_accessible_message_and_composer_semantics(self):
+        response = self.client.get("/chat/test-peer")
+        self.addCleanup(response.close)
+        html = response.get_data(as_text=True)
+        for fragment in (
+            '<section class="chat-page" data-peer="test-peer" aria-labelledby="chatTitle">',
+            '<button class="back-btn" type="button" onclick="location.href=\'/chats\'" aria-label="返回会话列表">',
+            '<div class="chat-title" id="chatTitle">test-peer</div>',
+            'onclick="loadMessages()" aria-label="刷新消息" title="刷新消息"',
+            'id="messageList" class="message-list" role="log" aria-label="消息列表" aria-live="polite" aria-relevant="additions text" aria-busy="true"',
+            '<div class="composer-mini" role="group" aria-label="消息操作">',
+            'data-composer-target="textComposer" onclick="toggleComposer(\'textComposer\')" aria-controls="textComposer" aria-expanded="false"',
+            'data-composer-target="fileComposer" onclick="toggleComposer(\'fileComposer\')" aria-controls="fileComposer" aria-expanded="false"',
+            'onclick="loadOlderMessages()" aria-controls="messageList" aria-label="加载更早消息"',
+            'id="textComposer" class="composer-panel" role="region" aria-label="文字消息发送区" aria-hidden="true" aria-busy="false"',
+            'id="messageInput" placeholder="输入消息（支持 Markdown）" aria-label="消息内容"',
+            'id="fileComposer" class="composer-panel" role="region" aria-label="媒体或文件发送区" aria-hidden="true" aria-busy="false"',
+            'id="sendFileInput" type="file" aria-label="选择要发送的媒体或文件"',
+            'id="captionInput" placeholder="说明文字，可选" aria-label="媒体或文件说明文字" autocomplete="off"',
+            'id="mediaViewer" class="media-viewer" role="dialog" aria-modal="true" aria-labelledby="viewerTitle" aria-describedby="viewerIndex"',
+            'id="viewerIndex" aria-live="polite" aria-atomic="true"',
+            'id="viewerDownload" class="viewer-btn" type="button" aria-label="下载当前媒体"',
+            'id="viewerClose" class="viewer-btn" type="button" aria-label="关闭媒体查看器"',
+            'id="viewerPrev" class="viewer-nav left" type="button" aria-label="上一项媒体"',
+            'id="viewerNext" class="viewer-nav right" type="button" aria-label="下一项媒体"',
+        ):
+            self.assertIn(fragment, html)
+
     def test_diagnostics_page_has_accessible_status_semantics(self):
         response = self.client.get("/diagnostics")
         self.addCleanup(response.close)
