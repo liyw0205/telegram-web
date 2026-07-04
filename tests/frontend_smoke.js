@@ -601,7 +601,7 @@ async function testFileExportOpensTokenizedDownloadUrl() {
 async function testTaskDeleteConfirmationControlsRequest() {
   let harness = createHarness();
   let action = harness.context.taskDelete("task-1", "running");
-  assert.strictEqual(textOf(harness, "confirmMessage"), "确认取消这个下载/预览任务？");
+  assert.strictEqual(textOf(harness, "confirmMessage"), "确认取消这个下载/预览任务？任务记录会移除，并向后台任务发送取消信号。");
   clickElement(harness, "confirmCancel");
   await action;
   assert.strictEqual(harness.calls.confirm.length, 0);
@@ -611,7 +611,7 @@ async function testTaskDeleteConfirmationControlsRequest() {
   harness.context.loadDownloadTasks = async () => {};
   harness.context.loadDownloadFiles = async () => {};
   action = harness.context.taskDelete("task-1", "done");
-  assert.strictEqual(textOf(harness, "confirmMessage"), "确认移除这条任务记录？");
+  assert.strictEqual(textOf(harness, "confirmMessage"), "确认移除这条终态任务记录？已下载文件不会删除。");
   clickElement(harness, "confirmOk");
   await action;
   assert.strictEqual(harness.calls.fetch[0].path, "/api/task/task-1");
@@ -631,10 +631,10 @@ async function testDownloadTasksRenderControlsAndErrors() {
   assert.strictEqual(harness.elements.get("downloadTaskList").getAttribute("aria-busy"), "false");
   expectHtmlIncludes(harness, "downloadTaskList", [
     'role="listitem"',
-    "download_media · running",
+    "下载原文件 · 运行中",
     "taskPause('run-1')",
-    "取消",
-    "prepare_media · done",
+    "取消任务",
+    "准备预览 · 已完成",
     "移除记录",
   ]);
 

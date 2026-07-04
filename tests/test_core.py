@@ -342,6 +342,7 @@ class FlaskBoundaryTest(unittest.TestCase):
         for fragment in (
             '<section class="mobile-panel" aria-labelledby="downloadsTitle">',
             '<h1 id="downloadsTitle">下载</h1>',
+            '支持暂停、恢复、取消任务、移除终态记录和分页查看文件',
             'onclick="loadDownloadsPage()" aria-label="刷新下载任务和文件" title="刷新下载任务和文件"',
             '<h2 class="section-title" id="downloadTaskTitle">任务</h2>',
             'id="downloadTaskList" class="download-list" role="list" aria-labelledby="downloadTaskTitle" aria-live="polite" aria-busy="true"',

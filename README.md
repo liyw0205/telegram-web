@@ -8,7 +8,7 @@
 - 会话列表
 - 聊天消息浏览
 - 媒体预览与下载（查看器支持键盘切换、关闭和焦点循环）
-- 下载任务管理（暂停 / 删除）
+- 下载任务管理（暂停 / 恢复 / 取消 / 移除记录）
 - StringSession / `.session` 导入导出（导出需一次性令牌）
 - 敏感操作自定义确认弹窗（含键盘焦点循环）
 - 只读脱敏诊断页面和诊断 API
@@ -126,6 +126,8 @@ TELEGRAM_WEB_HOST=0.0.0.0 TELEGRAM_WEB_PORT=5000 TELEGRAM_WEB_TOKEN=your-strong-
 - 使用代理时请确保 SOCKS5 可用
 - 媒体缓存会按上限自动清理
 - 终态下载/预览任务会记录到 `data/task-history.json`，重启后可继续在下载页看到最近历史
+- 下载页会分页列出 `Download/` 和 `Pictures/` 中已完成文件，并跳过 `.part` 临时文件
+- 暂停和恢复任务会直接执行；取消活跃任务或移除终态记录前会弹出确认，移除记录不会删除已下载文件
 - `data/`、`Download/`、`Pictures/` 和 `.session` 文件是本地运行数据，不要提交到 Git
 - 当前登录页开放手机号登录、验证码、2FA、StringSession 导入导出和 `.session` 文件导入导出
 - 敏感配置字段已保存时会显示脱敏占位符；`api_hash`、含凭据代理、StringSession、`.session` 文件名和 Web Token 留空会沿用已保存值

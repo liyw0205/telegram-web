@@ -878,7 +878,7 @@ async function taskPause(id){ try{ await api(`/api/task/${id}/pause`, { method:"
 async function taskResume(id){ try{ await api(`/api/task/${id}/resume`, { method:"POST", body:"{}" }); await loadDownloadTasks(); } catch(e){ toast(e.message); } }
 async function taskDelete(id, status = ""){
   const active = ["queued", "running", "paused"].includes(status);
-  const text = active ? "确认取消这个下载/预览任务？" : "确认移除这条任务记录？";
+  const text = active ? "确认取消这个下载/预览任务？任务记录会移除，并向后台任务发送取消信号。" : "确认移除这条终态任务记录？已下载文件不会删除。";
   if (!(await confirmSensitive(text))) return;
   try{
     await api(`/api/task/${id}`, { method:"DELETE" });
@@ -886,6 +886,22 @@ async function taskDelete(id, status = ""){
   } catch(e){ toast(e.message); }
 }
 
+function taskKindText(kind){
+  return {
+    download_media: "下载原文件",
+    prepare_media: "准备预览",
+  }[kind] || kind || "任务";
+}
+function taskStatusText(status){
+  return {
+    queued: "排队中",
+    running: "运行中",
+    paused: "已暂停",
+    done: "已完成",
+    error: "失败",
+    canceled: "已取消",
+  }[status] || status || "未知";
+}
 async function initDownloadsPage(){
   await loadDownloadsPage();
   if (downloadsTimer) clearInterval(downloadsTimer);
@@ -902,9 +918,9 @@ async function loadDownloadTasks(){
       return;
     }
     box.innerHTML = list.map(t => {
-      const controls = t.status === "running" ? `<button class="small-btn gray" onclick="taskPause('${t.id}')">暂停</button>` : t.status === "paused" ? `<button class="small-btn" onclick="taskResume('${t.id}')">恢复</button>` : "";
-      const deleteText = ["queued", "running", "paused"].includes(t.status) ? "取消" : "移除记录";
-      return `<div class="task-card" role="listitem"><div class="task-head"><div><div class="task-title">${escapeHtml(t.kind)} · ${escapeHtml(t.status)}</div><div class="task-meta">${escapeHtml(t.downloaded_text || "0 B")}${t.total_text ? " / " + escapeHtml(t.total_text) : ""}${t.speed_text ? " · " + escapeHtml(t.speed_text) : ""}</div></div><b>${t.progress || 0}%</b></div><div class="progress-line"><div style="width:${t.progress || 0}%"></div></div><div class="actions" style="margin-top:8px">${controls}<button class="small-btn danger" onclick="taskDelete('${t.id}', '${escapeHtml(t.status)}')">${deleteText}</button></div></div>`;
+      const controls = t.status === "running" ? `<button class="small-btn gray" type="button" onclick="taskPause('${t.id}')">暂停</button>` : t.status === "paused" ? `<button class="small-btn" type="button" onclick="taskResume('${t.id}')">恢复</button>` : "";
+      const deleteText = ["queued", "running", "paused"].includes(t.status) ? "取消任务" : "移除记录";
+      return `<div class="task-card" role="listitem"><div class="task-head"><div><div class="task-title">${escapeHtml(taskKindText(t.kind))} · ${escapeHtml(taskStatusText(t.status))}</div><div class="task-meta">${escapeHtml(t.downloaded_text || "0 B")}${t.total_text ? " / " + escapeHtml(t.total_text) : ""}${t.speed_text ? " · " + escapeHtml(t.speed_text) : ""}</div></div><b>${t.progress || 0}%</b></div><div class="progress-line"><div style="width:${t.progress || 0}%"></div></div><div class="actions" style="margin-top:8px">${controls}<button class="small-btn danger" type="button" onclick="taskDelete('${t.id}', '${escapeHtml(t.status)}')">${deleteText}</button></div></div>`;
     }).join("");
   } catch(e){
     box.innerHTML = `<div class="empty" role="listitem">${escapeHtml(e.message)}</div>`;

@@ -171,6 +171,26 @@ internal api error <error_id>
 grep 'internal api error err-id-here' "$HOME/telegram-web-logs/server.log"
 ```
 
+## 下载页任务和文件边界
+
+下载页包含两类列表：
+
+- 任务列表：显示当前下载/预览任务和最近终态任务历史。
+- 已下载文件：分页显示 `Download/` 和 `Pictures/` 下的完成文件。
+
+任务操作边界：
+
+- 运行中任务可暂停，已暂停任务可恢复；这两类操作直接执行，不弹确认。
+- 排队中、运行中或已暂停任务点击“取消任务”会先弹出确认；确认后任务记录会移除，并向后台任务发送取消信号。
+- 已完成、失败或已取消任务点击“移除记录”会先弹出确认；确认后只移除任务记录，不删除 `Download/` 或 `Pictures/` 中的文件。
+- 终态下载/预览任务会写入 `data/task-history.json`，用于重启后在下载页继续显示最近历史；运行中任务不会持久化。
+
+已下载文件边界：
+
+- 文件列表按 `Download/` 和 `Pictures/` 的文件修改时间全局排序并分页加载。
+- `.part` 临时文件和符号链接不会出现在已下载文件列表。
+- 加载第一页失败时会在文件列表区域显示错误；加载后续页失败时保留已有文件并显示 toast，内部错误会带可检索的错误 ID。
+
 ## 常见故障
 
 - 缺少依赖：运行 `pip install -r requirements.txt`，再执行 `sh scripts/diagnose-runtime.sh`。
