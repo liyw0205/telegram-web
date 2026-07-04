@@ -10,6 +10,14 @@ function response(data, status = 200) {
   };
 }
 
+function apiSuccess(data, status = 200) {
+  return { status, body: { success: true, data } };
+}
+
+function apiFailure(error, status = 500, extra = {}) {
+  return { status, body: { success: false, error, ...extra } };
+}
+
 function createElementState(initial = {}) {
   return {
     value: "",
@@ -25,13 +33,56 @@ function createElementState(initial = {}) {
   };
 }
 
+function routeResponse(value, path, options) {
+  try {
+    const resolved = typeof value === "function" ? value(path, options) : value;
+    if (resolved instanceof Error) return response(apiFailure(resolved.message).body, 500);
+    if (resolved && Object.prototype.hasOwnProperty.call(resolved, "status") && Object.prototype.hasOwnProperty.call(resolved, "body")) {
+      return response(resolved.body, resolved.status);
+    }
+    return response(apiSuccess(resolved).body);
+  } catch (err) {
+    return response(apiFailure(err.message || String(err)).body, 500);
+  }
+}
+
+function registerElements(elements, ids) {
+  ids.forEach((id) => {
+    if (!elements.has(id)) elements.set(id, createElementState());
+  });
+}
+
+function textOf(harness, id) {
+  return harness.elements.get(id).textContent;
+}
+
+function htmlOf(harness, id) {
+  return harness.elements.get(id).innerHTML;
+}
+
+function expectHtmlIncludes(harness, id, fragments) {
+  const html = htmlOf(harness, id);
+  fragments.forEach((fragment) => assert(html.includes(fragment), `expected ${id} to include ${fragment}`));
+}
+
 function createHarness({ confirmResult = true, search = "", routes = {} } = {}) {
   const elements = new Map();
   const calls = { confirm: [], fetch: [], open: [], clipboard: [], toast: [] };
-  elements.set("string_session", createElementState());
-  elements.set("downloadTaskList", createElementState());
-  elements.set("downloadFileList", createElementState());
-  elements.set("downloadFileStatus", createElementState());
+  registerElements(elements, [
+    "api_id",
+    "api_hash",
+    "phone",
+    "proxy",
+    "session_type",
+    "session_file",
+    "string_session",
+    "download_threads",
+    "cache_limit_mb",
+    "web_token",
+    "downloadTaskList",
+    "downloadFileList",
+    "downloadFileStatus",
+  ]);
   elements.set("downloadFileMore", createElementState({ style: { display: "none" } }));
   elements.set("toast", createElementState({ appendChild(item) { calls.toast.push(item.textContent); } }));
 
@@ -62,23 +113,20 @@ function createHarness({ confirmResult = true, search = "", routes = {} } = {}) 
       calls.fetch.push({ path, options });
       for (const [prefix, value] of Object.entries(routes)) {
         if (String(path).startsWith(prefix)) {
-          if (value instanceof Error) {
-            return response({ success: false, error: value.message }, 500);
-          }
-          return response({ success: true, data: typeof value === "function" ? value(path, options) : value });
+          return routeResponse(value, path, options);
         }
       }
       if (path === "/api/session/export-token") {
         const body = JSON.parse(options.body || "{}");
-        return response({ success: true, data: { export_token: `${body.kind}-token` } });
+        return response(apiSuccess({ export_token: `${body.kind}-token` }).body);
       }
       if (String(path).startsWith("/api/session/string")) {
-        return response({ success: true, data: { string_session: "exported-string-session" } });
+        return response(apiSuccess({ string_session: "exported-string-session" }).body);
       }
       if (String(path).startsWith("/api/task/")) {
-        return response({ success: true, data: { task_id: "task-1" } });
+        return response(apiSuccess({ task_id: "task-1" }).body);
       }
-      return response({ success: true, data: [] });
+      return response(apiSuccess([]).body);
     },
   };
   context.globalThis = context;
@@ -88,6 +136,76 @@ function createHarness({ confirmResult = true, search = "", routes = {} } = {}) 
   calls.fetch.length = 0;
   calls.toast.length = 0;
   return { context, elements, calls };
+}
+
+async function testApiCopiesErrorIdAndKeepsMessageActionable() {
+  const harness = createHarness({
+    routes: {
+      "/api/broken": apiFailure("内部错误", 500, { error_id: "err-phase10" }),
+    },
+  });
+
+  await assert.rejects(
+    () => harness.context.api("/api/broken"),
+    (err) => {
+      assert.strictEqual(err.message, "内部错误（错误 ID: err-phase10）");
+      assert.strictEqual(err.errorId, "err-phase10");
+      return true;
+    },
+  );
+  assert.deepStrictEqual(harness.calls.clipboard, ["err-phase10"]);
+}
+
+async function testApiRedirectsUnauthorizedToAuthPage() {
+  const harness = createHarness({
+    search: "?token=web-token",
+    routes: {
+      "/api/protected": apiFailure("未授权", 401),
+    },
+  });
+
+  await assert.rejects(
+    () => harness.context.api("/api/protected"),
+    /需要 Web Token/,
+  );
+  assert.strictEqual(harness.context.location.href, "/auth?next=%2Flogin%3Ftoken%3Dweb-token");
+}
+
+async function testLoadLoginPageUsesRedactedConfigPlaceholders() {
+  const harness = createHarness({
+    routes: {
+      "/api/config": {
+        api_id: 12345,
+        api_hash_saved: true,
+        phone: "+8613800000000",
+        proxy: "",
+        proxy_redacted: true,
+        session_type: "string",
+        session_file_saved: true,
+        string_session_saved: true,
+        download_threads: 8,
+        cache_limit_mb: 2048,
+        web_token_saved: true,
+      },
+    },
+  });
+
+  await harness.context.loadLoginPage();
+
+  assert.strictEqual(harness.elements.get("api_id").value, 12345);
+  assert.strictEqual(harness.elements.get("phone").value, "+8613800000000");
+  assert.strictEqual(harness.elements.get("session_type").value, "string");
+  assert.strictEqual(harness.elements.get("download_threads").value, 8);
+  assert.strictEqual(harness.elements.get("cache_limit_mb").value, 2048);
+  assert.strictEqual(harness.elements.get("api_hash").value, "");
+  assert.strictEqual(harness.elements.get("api_hash").placeholder, "已保存，留空沿用当前 api_hash");
+  assert.strictEqual(harness.elements.get("proxy").placeholder, "已保存含凭据代理，留空沿用");
+  assert.strictEqual(harness.elements.get("session_file").value, "");
+  assert.strictEqual(harness.elements.get("session_file").placeholder, "已保存，留空沿用当前 .session");
+  assert.strictEqual(harness.elements.get("string_session").value, "");
+  assert.strictEqual(harness.elements.get("string_session").placeholder, "已保存，留空沿用当前 StringSession");
+  assert.strictEqual(harness.elements.get("web_token").value, "");
+  assert.strictEqual(harness.elements.get("web_token").placeholder, "已保存，留空不修改 Web Token");
 }
 
 async function testCancelingStringExportDoesNotRequestToken() {
@@ -141,16 +259,17 @@ async function testDownloadTasksRenderControlsAndErrors() {
     },
   });
   await harness.context.loadDownloadTasks();
-  const html = harness.elements.get("downloadTaskList").innerHTML;
-  assert(html.includes("download_media · running"));
-  assert(html.includes("taskPause('run-1')"));
-  assert(html.includes("取消"));
-  assert(html.includes("prepare_media · done"));
-  assert(html.includes("移除记录"));
+  expectHtmlIncludes(harness, "downloadTaskList", [
+    "download_media · running",
+    "taskPause('run-1')",
+    "取消",
+    "prepare_media · done",
+    "移除记录",
+  ]);
 
   const failing = createHarness({ routes: { "/api/tasks": new Error("任务接口失败") } });
   await failing.context.loadDownloadTasks();
-  assert(failing.elements.get("downloadTaskList").innerHTML.includes("任务接口失败"));
+  expectHtmlIncludes(failing, "downloadTaskList", ["任务接口失败"]);
 }
 
 async function testDownloadFilesPaginationAndRendering() {
@@ -179,15 +298,14 @@ async function testDownloadFilesPaginationAndRendering() {
 
   await harness.context.loadDownloadFiles(true);
   assert.strictEqual(harness.calls.fetch[0].path, "/api/download-files?limit=30&offset=0");
-  assert(harness.elements.get("downloadFileList").innerHTML.includes("photo.jpg"));
-  assert(harness.elements.get("downloadFileList").innerHTML.includes("clip.mp4"));
-  assert.strictEqual(harness.elements.get("downloadFileStatus").textContent, "已显示 2 / 3");
+  expectHtmlIncludes(harness, "downloadFileList", ["photo.jpg", "clip.mp4"]);
+  assert.strictEqual(textOf(harness, "downloadFileStatus"), "已显示 2 / 3");
   assert.strictEqual(harness.elements.get("downloadFileMore").style.display, "inline-flex");
 
   await harness.context.loadDownloadFiles(false);
   assert.strictEqual(harness.calls.fetch[1].path, "/api/download-files?limit=30&offset=2");
-  assert(harness.elements.get("downloadFileList").innerHTML.includes("doc.txt"));
-  assert.strictEqual(harness.elements.get("downloadFileStatus").textContent, "已显示 3 / 3");
+  expectHtmlIncludes(harness, "downloadFileList", ["doc.txt"]);
+  assert.strictEqual(textOf(harness, "downloadFileStatus"), "已显示 3 / 3");
   assert.strictEqual(harness.elements.get("downloadFileMore").style.display, "none");
 }
 
@@ -198,28 +316,21 @@ async function testDownloadFilesErrorShowsToastAfterExistingPage() {
         if (path.includes("offset=0")) {
           return { items: [{ name: "first.bin", kind: "download", url: "/download-file/first.bin", size: 1 }], total: 2, has_more: true };
         }
-        throw new Error("下一页失败");
+        return apiFailure("下一页失败", 500);
       },
     },
   });
-  harness.context.fetch = async (path, options = {}) => {
-    harness.calls.fetch.push({ path, options });
-    if (String(path).startsWith("/api/download-files") && String(path).includes("offset=0")) {
-      return response({ success: true, data: { items: [{ name: "first.bin", kind: "download", url: "/download-file/first.bin", size: 1 }], total: 2, has_more: true } });
-    }
-    if (String(path).startsWith("/api/download-files")) {
-      return response({ success: false, error: "下一页失败" }, 500);
-    }
-    return response({ success: true, data: [] });
-  };
 
   await harness.context.loadDownloadFiles(true);
   await harness.context.loadDownloadFiles(false);
   assert(harness.calls.toast.includes("下一页失败"));
-  assert(harness.elements.get("downloadFileList").innerHTML.includes("first.bin"));
+  expectHtmlIncludes(harness, "downloadFileList", ["first.bin"]);
 }
 
 async function main() {
+  await testApiCopiesErrorIdAndKeepsMessageActionable();
+  await testApiRedirectsUnauthorizedToAuthPage();
+  await testLoadLoginPageUsesRedactedConfigPlaceholders();
   await testCancelingStringExportDoesNotRequestToken();
   await testStringExportRequestsOneTimeToken();
   await testFileExportOpensTokenizedDownloadUrl();

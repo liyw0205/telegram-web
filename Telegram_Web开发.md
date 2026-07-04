@@ -47,7 +47,7 @@
 | `templates/downloads.html` | 下载任务和已下载文件页面 |
 | `static/js/app.js` | 前端 API 封装、Socket.IO、会话/消息/媒体/下载交互 |
 | `static/css/app.css` | 全站样式和移动端布局 |
-| `tests/frontend_smoke.js` | 纯 Node 前端行为 smoke，mock 浏览器环境验证敏感确认和导出令牌请求链 |
+| `tests/frontend_smoke.js` | 纯 Node 前端行为 smoke，mock 浏览器环境验证敏感确认、导出令牌、API 错误、登录页配置和下载页状态 |
 | `docs/progress/` | 每阶段开发进度文档 |
 | `docs/handoff/` | 每阶段会话交接文档，`LATEST.md` 指向/承载最新交接内容 |
 
@@ -465,3 +465,5 @@ rg -n "api\\(|fetch\\(|io\\(|/api/|socket|downloadMedia|prepareMedia|send" stati
 2026-07-05：Phase 8 增加纯 Node 前端行为 smoke 测试，不引入 Playwright/npm 依赖，覆盖确认取消不发请求、确认后申请一次性导出令牌、文件导出 URL 和任务删除确认。
 
 2026-07-05：Phase 9 扩展前端 smoke 覆盖下载任务渲染、任务接口错误、下载文件分页、分页按钮状态和下一页错误 toast，继续保持无前端构建链。
+
+2026-07-05：Phase 10 重整前端 smoke harness，补充 `api()` 错误 ID 复制、401 跳转和 `loadLoginPage()` 脱敏配置占位符覆盖，继续不引入前端测试依赖。
