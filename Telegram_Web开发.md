@@ -506,3 +506,5 @@ rg -n "api\\(|fetch\\(|io\\(|/api/|socket|downloadMedia|prepareMedia|send" stati
 2026-07-05：Phase 25 为聊天页消息列表、文字/文件发送区和媒体查看器补充可访问性语义，消息加载和发送流程增加动态 `aria-busy`/`aria-hidden`，并补充聊天页静态测试和纯 Node smoke。
 
 2026-07-05：Phase 26 为会话列表页标题、搜索框、刷新按钮、列表容器、空/错误状态、动态会话项和未读徽标补充可访问性语义，并补充会话页静态测试和纯 Node smoke。
+
+2026-07-05：Phase 27 将 Phase 21-26 的登录、会话列表、聊天页、下载页、诊断页、全局反馈和媒体查看器可访问性检查收口到手动浏览器 smoke 清单，继续不引入 Playwright/npm 依赖。
