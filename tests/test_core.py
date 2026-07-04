@@ -375,7 +375,7 @@ class FlaskBoundaryTest(unittest.TestCase):
             'id="captionInput" placeholder="说明文字，可选" aria-label="媒体或文件说明文字" autocomplete="off"',
             'id="mediaViewer" class="media-viewer" role="dialog" aria-modal="true" aria-labelledby="viewerTitle" aria-describedby="viewerIndex"',
             'id="viewerIndex" aria-live="polite" aria-atomic="true"',
-            'id="viewerDownload" class="viewer-btn" type="button" aria-label="下载当前媒体"',
+            'id="viewerDownload" class="viewer-btn" type="button" aria-label="创建当前媒体下载任务"',
             'id="viewerClose" class="viewer-btn" type="button" aria-label="关闭媒体查看器"',
             'id="viewerPrev" class="viewer-nav left" type="button" aria-label="上一项媒体"',
             'id="viewerNext" class="viewer-nav right" type="button" aria-label="下一项媒体"',

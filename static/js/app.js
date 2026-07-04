@@ -470,7 +470,7 @@ function decorateMessageElement(el, m, mediaCount = 0){
   el.setAttribute("aria-label", messageAriaLabel(m, mediaCount));
 }
 function mediaDownloadButtonHtml(msgId){
-  return `<button class="media-download-btn" type="button" aria-label="下载媒体 ${msgId}" onclick="event.stopPropagation(); downloadMedia(${msgId})">⬇</button>`;
+  return `<button class="media-download-btn" type="button" aria-label="创建媒体 ${msgId} 下载任务" title="创建下载任务" onclick="event.stopPropagation(); downloadMedia(${msgId})">⬇</button>`;
 }
 async function loadMessages(){
   if (!CURRENT_PEER) return;
@@ -725,10 +725,10 @@ function renderMediaPreviewNode(url, mime){
 async function openMediaViewerByMessage(msgId){
   const d = await api("/api/media/prepare", { method:"POST", body: JSON.stringify({ peer: CURRENT_PEER, msg_id: msgId }) });
   if (!d.ready) {
-    toast("媒体正在准备");
+    toast("媒体正在准备，稍后重试打开");
     return;
   }
-  openGallery([{ msgId, url: d.url, mime: d.mime || "", label: `media ${msgId}` }], 0);
+  openGallery([{ msgId, url: d.url, mime: d.mime || "", label: `媒体 #${msgId}` }], 0);
 }
 
 function bindGroupCellClicks(clusterId, galleryItems){
@@ -871,7 +871,7 @@ async function downloadMedia(msgId){
   if (!CURRENT_PEER) return;
   try{
     await api("/api/download-media", { method:"POST", body: JSON.stringify({ peer: CURRENT_PEER, msg_id: msgId }) });
-    toast("下载任务已创建");
+    toast("下载任务已创建，可在下载页查看进度");
   } catch(e){ toast(e.message); }
 }
 async function taskPause(id){ try{ await api(`/api/task/${id}/pause`, { method:"POST", body:"{}" }); await loadDownloadTasks(); } catch(e){ toast(e.message); } }

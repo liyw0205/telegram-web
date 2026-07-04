@@ -414,6 +414,36 @@ async function testChatMessageLoadAndSendUseAccessibleState() {
   assert.strictEqual(harness.elements.get("messageList").appended.at(-1).getAttribute("aria-label"), "已发送消息");
 }
 
+async function testMediaPrepareViewerAndDownloadTaskCopy() {
+  let harness = createHarness({
+    routes: {
+      "/api/messages": [],
+      "/api/media/prepare": { ready: false, task_id: "prep-1" },
+    },
+  });
+
+  await harness.context.initSingleChatPage("peer-1");
+  await harness.context.openMediaViewerByMessage(42);
+  assert(harness.calls.toast.includes("媒体正在准备，稍后重试打开"));
+
+  harness = createHarness({
+    routes: {
+      "/api/messages": [],
+      "/api/media/prepare": { ready: true, url: "/media-cache/item.jpg", mime: "image/jpeg" },
+      "/api/download-media": { task_id: "download-1" },
+    },
+  });
+
+  await harness.context.initSingleChatPage("peer-1");
+  await harness.context.openMediaViewerByMessage(42);
+  assert.strictEqual(textOf(harness, "viewerTitle"), "媒体 #42");
+  await harness.context.downloadMedia(42);
+  const downloadCall = harness.calls.fetch.find((call) => call.path === "/api/download-media");
+  assert(downloadCall, "expected media download task request");
+  assert.deepStrictEqual(JSON.parse(downloadCall.options.body), { peer: "peer-1", msg_id: 42 });
+  assert(harness.calls.toast.includes("下载任务已创建，可在下载页查看进度"));
+}
+
 async function testDialogListRendersAccessibleItemsAndBusyState() {
   const harness = createHarness({
     routes: {
@@ -828,6 +858,7 @@ const TEST_GROUPS = [
     name: "chat messages",
     tests: [
       testChatMessageLoadAndSendUseAccessibleState,
+      testMediaPrepareViewerAndDownloadTaskCopy,
     ],
   },
   {
