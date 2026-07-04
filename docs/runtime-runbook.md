@@ -135,6 +135,23 @@ curl -H "X-Web-Telegram-Token: $TELEGRAM_WEB_TOKEN" http://127.0.0.1:5000/api/di
 
 该接口不返回 `api_hash`、手机号原文、代理 URL、代理用户名/密码、StringSession、`.session` 文件路径或内容、Web Token、Cookie 或导出令牌。
 
+## 会话列表和诊断页边界
+
+会话列表页：
+
+- `/chats` 打开后调用 `/api/dialogs?limit=120` 加载最近会话；刷新按钮会重新请求该接口。
+- 搜索框只过滤前端已加载的会话数据，不触发新的 Telegram 查询。
+- 搜索字段覆盖会话名称、用户名、peer 和 ID；清空搜索会恢复当前已加载列表。
+- 初始列表为空时显示“暂无会话”；搜索无匹配时显示“没有匹配的会话”。
+- 会话项只显示名称、用户名、会话类型和未读数量；未读徽标不包含消息内容。
+
+诊断页：
+
+- `/diagnostics` 只读渲染 `/api/diagnostics` 返回的白名单状态。
+- 摘要格式为“Web Token 状态 · Token 来源 · 监听范围 · 端口 N”；不显示原始 host、URL、Token 或本地路径。
+- 配置、访问、运行和目录列表只展示布尔、枚举或数值状态；不展示 `api_hash`、手机号原文、代理原文、StringSession、`.session` 路径、Web Token、Cookie 或导出令牌。
+- 诊断接口失败时摘要区域显示错误，四组列表清空，并通过 toast 提示；如果错误包含 `error_id`，前端会展示“错误 ID”并尝试复制到剪贴板。
+
 ## 日志
 
 前台运行时，Flask、Socket.IO 和应用错误日志会输出在当前终端。

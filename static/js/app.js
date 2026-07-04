@@ -185,7 +185,7 @@ async function loadDiagnosticsPage(){
   try{
     const d = await api("/api/diagnostics");
     const cfg = d.config || {}, auth = d.web_auth || {}, runtime = d.runtime || {}, paths = d.paths || {};
-    if (summary) summary.textContent = `${auth.enabled ? "Web Token 已启用" : "Web Token 未启用"} · ${authSourceText(auth.source)} · ${runtimeScopeText(runtime)} · ${runtimePortText(runtime)}`;
+    if (summary) summary.textContent = `${auth.enabled ? "Web Token 已启用" : "Web Token 未启用"} · ${authSourceText(auth.source)} · ${runtimeScopeText(runtime)} · 端口 ${runtimePortText(runtime)}`;
     renderDiagnosticsRows("diagnosticsConfig", [
       ["配置文件", cfg.exists, cfg.exists],
       ["api_id", cfg.api_id_configured, cfg.api_id_configured],
@@ -207,7 +207,7 @@ async function loadDiagnosticsPage(){
     ]);
     renderDiagnosticsRows("diagnosticsRuntime", [
       ["监听范围", runtime.loopback ? "本机" : "对外", runtime.loopback || auth.enabled],
-      ["Port", runtimePortText(runtime), runtime.port_valid],
+      ["端口", runtimePortText(runtime), runtime.port_valid],
       ["对外监听需 Token", runtime.external_bind_requires_token, !runtime.external_bind_requires_token || auth.enabled],
     ]);
     renderDiagnosticsRows("diagnosticsPaths", [
@@ -417,10 +417,10 @@ function dialogAriaLabel(d){
   const unread = d.unread_count ? `，${d.unread_count} 条未读` : "";
   return `${name}，${dialogTypeText(d)}${username}${unread}`;
 }
-function renderDialogs(list){
+function renderDialogs(list, emptyText = "暂无会话"){
   const box = $("dialogList"); if (!box) return;
   box.innerHTML = "";
-  if (!list.length) return box.innerHTML = `<div class="empty" role="listitem">暂无会话</div>`;
+  if (!list.length) return box.innerHTML = `<div class="empty" role="listitem">${escapeHtml(emptyText)}</div>`;
   list.forEach(d => {
     const first = String(d.name || "?").trim().slice(0, 1).toUpperCase();
     const a = document.createElement("a");
@@ -435,7 +435,10 @@ function renderDialogs(list){
 function filterDialogs(){
   const q = $("dialogSearch").value.trim().toLowerCase();
   if (!q) return renderDialogs(DIALOGS);
-  renderDialogs(DIALOGS.filter(d => String(d.name||"").toLowerCase().includes(q) || String(d.username||"").toLowerCase().includes(q) || String(d.peer||"").toLowerCase().includes(q) || String(d.id||"").includes(q)));
+  renderDialogs(
+    DIALOGS.filter(d => String(d.name||"").toLowerCase().includes(q) || String(d.username||"").toLowerCase().includes(q) || String(d.peer||"").toLowerCase().includes(q) || String(d.id||"").includes(q)),
+    "没有匹配的会话"
+  );
 }
 
 /* 聊天 */

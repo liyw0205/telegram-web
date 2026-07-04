@@ -330,7 +330,7 @@ class FlaskBoundaryTest(unittest.TestCase):
             '<h1 id="dialogsTitle">会话</h1>',
             'onclick="loadDialogs()" aria-label="刷新会话列表" title="刷新会话列表"',
             '<div class="search-wrap" role="search" aria-label="搜索会话">',
-            'id="dialogSearch" type="search" placeholder="搜索会话、用户名、ID" oninput="filterDialogs()" aria-label="搜索会话、用户名或 ID" aria-controls="dialogList" autocomplete="off"',
+            'id="dialogSearch" type="search" placeholder="搜索会话、用户名、peer、ID" oninput="filterDialogs()" aria-label="搜索会话、用户名、peer 或 ID" aria-controls="dialogList" autocomplete="off"',
             'id="dialogList" class="dialog-list" role="list" aria-labelledby="dialogsTitle" aria-live="polite" aria-busy="true"',
         ):
             self.assertIn(fragment, html)
@@ -389,7 +389,7 @@ class FlaskBoundaryTest(unittest.TestCase):
         for fragment in (
             'aria-labelledby="diagnosticsTitle"',
             'id="diagnosticsSummary" class="diagnostics-summary" role="status" aria-live="polite" aria-atomic="true" aria-busy="true"',
-            'aria-label="刷新诊断状态"',
+            'type="button" onclick="loadDiagnosticsPage()" aria-label="刷新诊断状态" title="刷新诊断状态"',
             'id="diagnosticsConfig" class="diagnostics-list" role="list" aria-labelledby="diagnosticsConfigTitle" aria-busy="true"',
             'id="diagnosticsAuth" class="diagnostics-list" role="list" aria-labelledby="diagnosticsAuthTitle" aria-busy="true"',
             'id="diagnosticsRuntime" class="diagnostics-list" role="list" aria-labelledby="diagnosticsRuntimeTitle" aria-busy="true"',

@@ -462,6 +462,10 @@ async function testDialogListRendersAccessibleItemsAndBusyState() {
   assert.strictEqual(list.appended[0].getAttribute("aria-label"), "Alice，私聊，用户名 @alice，3 条未读");
   assert.strictEqual(list.appended[0].href, "/chat/user-1");
   assert(list.appended[0].innerHTML.includes('aria-label="未读 3 条"'));
+
+  harness.elements.get("dialogSearch").value = "missing";
+  harness.context.filterDialogs();
+  expectHtmlIncludes(harness, "dialogList", ["没有匹配的会话"]);
 }
 
 async function testGalleryFocusTrapCyclesWithinViewerControls() {
@@ -784,7 +788,7 @@ async function testDiagnosticsPageRendersRedactedStatusOnly() {
   await harness.context.loadDiagnosticsPage();
 
   assert.strictEqual(harness.calls.fetch[0].path, "/api/diagnostics");
-  assert.strictEqual(textOf(harness, "diagnosticsSummary"), "Web Token 已启用 · 环境变量 · 本机监听 · 5000");
+  assert.strictEqual(textOf(harness, "diagnosticsSummary"), "Web Token 已启用 · 环境变量 · 本机监听 · 端口 5000");
   assert(harness.elements.get("diagnosticsSummary").classList.contains("ok"));
   assert(!harness.elements.get("diagnosticsSummary").classList.contains("warn"));
   assert.strictEqual(harness.elements.get("diagnosticsSummary").getAttribute("aria-busy"), "false");
@@ -792,7 +796,7 @@ async function testDiagnosticsPageRendersRedactedStatusOnly() {
   expectHtmlIncludes(harness, "diagnosticsConfig", ["api_hash", "已保存，含凭据", "StringSession", "缓存上限(MB)", "1024"]);
   expectHtmlIncludes(harness, "diagnosticsConfig", ["role=\"listitem\"", "aria-label=\"配置文件：是\""]);
   expectHtmlIncludes(harness, "diagnosticsAuth", ["Web Token", "Token 来源", "环境变量"]);
-  expectHtmlIncludes(harness, "diagnosticsRuntime", ["监听范围", "本机", "Port", "5000"]);
+  expectHtmlIncludes(harness, "diagnosticsRuntime", ["监听范围", "本机", "端口", "5000"]);
   expectHtmlIncludes(harness, "diagnosticsPaths", ["data", "Download", "Pictures"]);
 
   const rendered = [

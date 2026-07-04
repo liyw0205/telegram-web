@@ -518,3 +518,5 @@ rg -n "api\\(|fetch\\(|io\\(|/api/|socket|downloadMedia|prepareMedia|send" stati
 2026-07-05：Phase 31 对齐下载页暂停、恢复、取消任务、移除终态记录、分页文件、`.part` 临时文件和错误 ID 边界文案，将任务种类/状态改为中文显示并同步 README、runbook、浏览器 smoke 与测试断言；未改下载状态机或文件枚举逻辑。
 
 2026-07-05：Phase 32 对齐聊天页文字/文件发送、媒体缩略图、按需准备、下载任务创建和媒体查看器文案，补充 README、runbook、浏览器 smoke 与前端/后端测试断言；未改发送、媒体缓存或下载任务行为。
+
+2026-07-05：Phase 33 对齐会话列表搜索字段、无匹配空状态、诊断摘要端口和运行端口文案，补充 README、runbook、浏览器 smoke 与前端/后端测试断言；未改会话加载、诊断采集、脱敏、鉴权或 API 行为。
