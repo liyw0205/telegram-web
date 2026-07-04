@@ -9,6 +9,9 @@ const DOWNLOAD_FILE_LIMIT = 30;
 
 let GALLERY_ITEMS = [];
 let GALLERY_INDEX = 0;
+let galleryLastFocus = null;
+let galleryKeydownBound = false;
+let galleryEventsBound = false;
 const SHOW_META = false;
 let pendingConfirm = null;
 let confirmDialogBound = false;
@@ -608,18 +611,51 @@ function appendLiveMessage(msg){
 /* 查看器 */
 function bindGalleryEvents(){
   const viewer = $("mediaViewer"); if (!viewer) return;
+  if (galleryEventsBound) return;
+  galleryEventsBound = true;
   $("viewerClose")?.addEventListener("click", closeGallery);
   $("viewerPrev")?.addEventListener("click", () => moveGallery(-1));
   $("viewerNext")?.addEventListener("click", () => moveGallery(1));
   $("viewerDownload")?.addEventListener("click", () => { const cur = GALLERY_ITEMS[GALLERY_INDEX]; if (cur) downloadMedia(cur.msgId); });
 }
+function handleGalleryKeydown(event){
+  const viewer = $("mediaViewer");
+  if (!viewer?.classList.contains("show") || pendingConfirm) return;
+  if (event.key === "Escape") {
+    event.preventDefault();
+    closeGallery();
+  } else if (event.key === "ArrowLeft") {
+    event.preventDefault();
+    moveGallery(-1);
+  } else if (event.key === "ArrowRight") {
+    event.preventDefault();
+    moveGallery(1);
+  }
+}
 function openGallery(items, startIndex = 0){
   if (!items?.length) return;
+  const viewer = $("mediaViewer"); if (!viewer) return;
+  const wasOpen = viewer.classList.contains("show");
   GALLERY_ITEMS = items; GALLERY_INDEX = Math.max(0, Math.min(startIndex, items.length - 1));
-  $("mediaViewer")?.classList.add("show");
+  if (!wasOpen) galleryLastFocus = document.activeElement || null;
+  viewer.classList.add("show");
+  if (!galleryKeydownBound) {
+    document.addEventListener("keydown", handleGalleryKeydown);
+    galleryKeydownBound = true;
+  }
   renderGalleryCurrent();
+  setTimeout(() => $("viewerClose")?.focus(), 0);
 }
-function closeGallery(){ $("mediaViewer")?.classList.remove("show"); }
+function closeGallery(){
+  const viewer = $("mediaViewer"); if (!viewer?.classList.contains("show")) return;
+  viewer.classList.remove("show");
+  if (galleryKeydownBound) {
+    document.removeEventListener("keydown", handleGalleryKeydown);
+    galleryKeydownBound = false;
+  }
+  if (galleryLastFocus && typeof galleryLastFocus.focus === "function") galleryLastFocus.focus();
+  galleryLastFocus = null;
+}
 function moveGallery(step){
   if (!GALLERY_ITEMS.length) return;
   GALLERY_INDEX = (GALLERY_INDEX + step + GALLERY_ITEMS.length) % GALLERY_ITEMS.length;

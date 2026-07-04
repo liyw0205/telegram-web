@@ -47,7 +47,7 @@
 | `templates/downloads.html` | 下载任务和已下载文件页面 |
 | `static/js/app.js` | 前端 API 封装、Socket.IO、会话/消息/媒体/下载交互 |
 | `static/css/app.css` | 全站样式和移动端布局 |
-| `tests/frontend_smoke.js` | 纯 Node 前端行为 smoke，mock 浏览器环境验证自定义敏感确认、键盘焦点循环、导出令牌、API 错误、登录页配置和下载页状态 |
+| `tests/frontend_smoke.js` | 纯 Node 前端行为 smoke，mock 浏览器环境验证自定义敏感确认、键盘焦点循环、媒体查看器键盘交互、导出令牌、API 错误、登录页配置和下载页状态 |
 | `docs/progress/` | 每阶段开发进度文档 |
 | `docs/handoff/` | 每阶段会话交接文档，`LATEST.md` 指向/承载最新交接内容 |
 
@@ -471,3 +471,5 @@ rg -n "api\\(|fetch\\(|io\\(|/api/|socket|downloadMedia|prepareMedia|send" stati
 2026-07-05：Phase 11 用轻量自定义确认弹窗替换敏感操作的原生 `confirm()`，覆盖确认、取消、Esc 关闭和并发确认边界；本地评估真实浏览器 smoke 条件后暂不引入 Playwright。
 
 2026-07-05：Phase 12 为自定义确认弹窗增加轻量 focus trap，覆盖 Tab、Shift+Tab 和弹窗外焦点回拉；媒体查看器和 composer 键盘交互作为后续独立阶段处理。
+
+2026-07-05：Phase 13 为媒体查看器增加打开前焦点记录、关闭后焦点恢复、Esc 关闭和左右方向键切换，并补充纯 Node smoke 覆盖。

@@ -133,6 +133,15 @@ function createHarness({ confirmResult = true, search = "", routes = {} } = {}) 
     "confirmMessage",
     "confirmOk",
     "confirmCancel",
+    "mediaViewer",
+    "viewerTitle",
+    "viewerIndex",
+    "viewerBody",
+    "viewerClose",
+    "viewerPrev",
+    "viewerNext",
+    "viewerDownload",
+    "galleryTrigger",
   ]);
   elements.set("confirmOverlay", createElementState({ hidden: true }));
   elements.set("downloadFileMore", createElementState({ style: { display: "none" } }));
@@ -272,6 +281,55 @@ async function testSensitiveConfirmReentrantCancelsPrevious() {
   assert.strictEqual(textOf(harness, "confirmMessage"), "第二个确认");
   clickElement(harness, "confirmOk");
   assert.strictEqual(await second, true);
+}
+
+async function testGalleryKeyboardNavigationAndFocusRestore() {
+  const harness = createHarness();
+  const trigger = harness.elements.get("galleryTrigger");
+  harness.context.document.activeElement = trigger;
+
+  harness.context.openGallery([
+    { msgId: 1, url: "/media/one.jpg", mime: "image/jpeg", label: "第一张" },
+    { msgId: 2, url: "/media/two.mp4", mime: "video/mp4", label: "第二段" },
+  ], 0);
+
+  assert(harness.elements.get("mediaViewer").classList.contains("show"));
+  assert.strictEqual(harness.context.document.activeElement, harness.elements.get("viewerClose"));
+  assert.strictEqual(textOf(harness, "viewerTitle"), "第一张");
+  assert.strictEqual(textOf(harness, "viewerIndex"), "1 / 2");
+  expectHtmlIncludes(harness, "viewerBody", ["/media/one.jpg"]);
+
+  pressDocumentKey(harness, "ArrowRight");
+  assert.strictEqual(textOf(harness, "viewerTitle"), "第二段");
+  assert.strictEqual(textOf(harness, "viewerIndex"), "2 / 2");
+  expectHtmlIncludes(harness, "viewerBody", ["/media/two.mp4"]);
+
+  pressDocumentKey(harness, "ArrowLeft");
+  assert.strictEqual(textOf(harness, "viewerTitle"), "第一张");
+  assert.strictEqual(textOf(harness, "viewerIndex"), "1 / 2");
+
+  pressDocumentKey(harness, "Escape");
+  assert(!harness.elements.get("mediaViewer").classList.contains("show"));
+  assert.strictEqual(harness.context.document.activeElement, trigger);
+  assert.deepStrictEqual(harness.calls.preventDefault, ["ArrowRight", "ArrowLeft", "Escape"]);
+}
+
+async function testGalleryKeyboardIgnoresKeysWhileConfirmIsOpen() {
+  const harness = createHarness();
+  harness.context.openGallery([
+    { msgId: 1, url: "/media/one.jpg", mime: "image/jpeg", label: "第一张" },
+    { msgId: 2, url: "/media/two.jpg", mime: "image/jpeg", label: "第二张" },
+  ], 0);
+  const confirmResult = harness.context.confirmSensitive("确认覆盖查看器");
+
+  pressDocumentKey(harness, "ArrowRight");
+  assert.strictEqual(textOf(harness, "viewerTitle"), "第一张");
+  pressDocumentKey(harness, "Escape");
+  assert(harness.elements.get("mediaViewer").classList.contains("show"));
+  assert.strictEqual(await confirmResult, false);
+
+  pressDocumentKey(harness, "Escape");
+  assert(!harness.elements.get("mediaViewer").classList.contains("show"));
 }
 
 async function testApiCopiesErrorIdAndKeepsMessageActionable() {
@@ -482,6 +540,8 @@ async function main() {
   await testSensitiveConfirmFocusTrapCyclesWithinDialog();
   await testSensitiveConfirmEscapeCancels();
   await testSensitiveConfirmReentrantCancelsPrevious();
+  await testGalleryKeyboardNavigationAndFocusRestore();
+  await testGalleryKeyboardIgnoresKeysWhileConfirmIsOpen();
   await testApiCopiesErrorIdAndKeepsMessageActionable();
   await testApiRedirectsUnauthorizedToAuthPage();
   await testLoadLoginPageUsesRedactedConfigPlaceholders();
