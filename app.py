@@ -31,6 +31,7 @@ for p in [DATA_DIR, DOWNLOAD_DIR, PICTURES_DIR, CACHE_DIR, UPLOAD_DIR]:
     p.mkdir(parents=True, exist_ok=True)
 
 CONFIG_FILE = DATA_DIR / "config.json"
+TASK_HISTORY_FILE = DATA_DIR / "task-history.json"
 
 DEFAULT_CONFIG = {
     "api_id": 0,
@@ -548,16 +549,78 @@ def cache_cleanup(limit_mb):
 
 
 class TaskStore:
-    def __init__(self):
+    def __init__(self, history_file=None, load_history=False):
         self.lock = threading.Lock()
         self.tasks = {}
         self.terminal_statuses = {"done", "error", "canceled"}
+        self.history_file = Path(history_file) if history_file else None
+        if load_history and self.history_file:
+            self.load_history()
+
+    def sanitize_for_history(self, task):
+        error = "任务失败" if task.get("error") else ""
+        return {
+            "id": str(task.get("id") or ""),
+            "kind": str(task.get("kind") or ""),
+            "status": str(task.get("status") or ""),
+            "progress": int(task.get("progress") or 0),
+            "downloaded": int(task.get("downloaded") or 0),
+            "total": int(task.get("total") or 0),
+            "speed": 0,
+            "file": Path(str(task.get("file") or "")).name,
+            "url": str(task.get("url") or ""),
+            "path": "",
+            "mime": str(task.get("mime") or ""),
+            "error": error,
+            "created_at": float(task.get("created_at") or time.time()),
+            "updated_at": float(task.get("updated_at") or task.get("created_at") or time.time()),
+            "meta": {},
+        }
+
+    def load_history(self):
+        if not self.history_file:
+            return
+        try:
+            rows = json.loads(self.history_file.read_text("utf-8"))
+        except Exception:
+            return
+        if not isinstance(rows, list):
+            return
+        with self.lock:
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                if row.get("status") not in self.terminal_statuses:
+                    continue
+                task_id = str(row.get("id") or "")
+                if not task_id:
+                    continue
+                self.tasks[task_id] = self.sanitize_for_history(row)
+
+    def save_history(self, max_items=200):
+        if not self.history_file:
+            return
+        with self.lock:
+            rows = [
+                self.sanitize_for_history(task)
+                for task in self.tasks.values()
+                if task.get("status") in self.terminal_statuses
+            ]
+        rows.sort(key=lambda task: task.get("updated_at", 0), reverse=True)
+        rows = rows[:max_items]
+        try:
+            self.history_file.parent.mkdir(parents=True, exist_ok=True)
+            self.history_file.write_text(json.dumps(rows, ensure_ascii=False, indent=2), "utf-8")
+        except Exception:
+            app.logger.exception("failed to save task history")
+
     def create(self, kind, meta=None):
         task_id = uuid.uuid4().hex
         with self.lock:
             self.tasks[task_id] = {"id": task_id, "kind": kind, "status": "queued", "progress": 0, "downloaded": 0, "total": 0, "speed": 0, "file": "", "url": "", "path": "", "mime": "", "error": "", "created_at": time.time(), "updated_at": time.time(), "meta": meta or {}}
         return task_id
     def update(self, task_id, force=False, **patch):
+        persist = False
         with self.lock:
             if task_id not in self.tasks: return
             current = self.tasks[task_id].get("status")
@@ -568,6 +631,9 @@ class TaskStore:
                 return
             self.tasks[task_id].update(patch)
             self.tasks[task_id]["updated_at"] = time.time()
+            persist = self.tasks[task_id].get("status") in self.terminal_statuses
+        if persist:
+            self.save_history()
     def get(self, task_id):
         with self.lock:
             return dict(self.tasks.get(task_id) or {})
@@ -575,10 +641,15 @@ class TaskStore:
         with self.lock:
             return [dict(v) for v in self.tasks.values()]
     def delete(self, task_id):
+        persist = False
         with self.lock:
-            self.tasks.pop(task_id, None)
+            task = self.tasks.pop(task_id, None)
+            persist = bool(task and task.get("status") in self.terminal_statuses)
+        if persist:
+            self.save_history()
     def cleanup(self, max_age=3600, max_items=200):
         now = time.time()
+        changed = False
         with self.lock:
             removable = [
                 (task_id, task)
@@ -588,16 +659,19 @@ class TaskStore:
             for task_id, _task in removable:
                 self.tasks.pop(task_id, None)
                 task_controls.pop(task_id, None)
-            if len(self.tasks) <= max_items:
-                return
-            overflow = sorted(self.tasks.items(), key=lambda item: item[1].get("updated_at", 0))[:len(self.tasks) - max_items]
-            for task_id, task in overflow:
-                if task.get("status") in self.terminal_statuses:
-                    self.tasks.pop(task_id, None)
-                    task_controls.pop(task_id, None)
+                changed = True
+            if len(self.tasks) > max_items:
+                overflow = sorted(self.tasks.items(), key=lambda item: item[1].get("updated_at", 0))[:len(self.tasks) - max_items]
+                for task_id, task in overflow:
+                    if task.get("status") in self.terminal_statuses:
+                        self.tasks.pop(task_id, None)
+                        task_controls.pop(task_id, None)
+                        changed = True
+        if changed:
+            self.save_history()
 
 
-tasks = TaskStore()
+tasks = TaskStore(history_file=TASK_HISTORY_FILE, load_history=True)
 task_controls = {}
 
 
@@ -1341,7 +1415,10 @@ def api_task(task_id):
     task = tasks.get(task_id)
     if not task: return fail("任务不存在", 404)
     if request.method == "DELETE":
-        task_controls.setdefault(task_id, {"paused": False, "canceled": False})["canceled"] = True
+        if task.get("status") in tasks.terminal_statuses:
+            task_controls.pop(task_id, None)
+        else:
+            task_controls.setdefault(task_id, {"paused": False, "canceled": False})["canceled"] = True
         tasks.delete(task_id)
         return ok({"task_id": task_id}, "已删除")
     task["downloaded_text"] = format_size(task.get("downloaded", 0))
@@ -1371,7 +1448,7 @@ def api_task_resume(task_id):
 
 @app.route("/api/tasks")
 def api_tasks():
-    tasks.cleanup()
+    tasks.cleanup(max_age=7 * 24 * 3600, max_items=200)
     result = []
     for task in tasks.list():
         task["downloaded_text"] = format_size(task.get("downloaded", 0))

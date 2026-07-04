@@ -67,6 +67,7 @@ data/uploads/
 | 文件/目录 | 说明 |
 |-----------|------|
 | `data/config.json` | API 配置、代理、session 类型、下载线程数和缓存上限 |
+| `data/task-history.json` | 终态下载/预览任务历史，最多保留最近记录，不能提交 |
 | `data/telegram.session` 或自定义 session 文件 | Telethon 文件会话，不能提交 |
 | `Download/` | 用户主动下载的媒体文件 |
 | `Pictures/` | 图片文件服务目录 |
@@ -446,3 +447,5 @@ rg -n "api\\(|fetch\\(|io\\(|/api/|socket|downloadMedia|prepareMedia|send" stati
 2026-07-04：Phase 4 优化下载页分页加载和任务/文件刷新节奏，增加内部错误通用响应与 `error_id`，小幅收紧移动端下载卡片和聊天输入布局，测试扩展到 36 个。
 
 2026-07-04：Phase 5 补充 StringSession 和 `.session` 文件导入导出，StringSession 登录成功后自动持久化，并完善 README 中部署、备份和恢复说明。
+
+2026-07-04：Phase 6 增加终态任务历史持久化到 `data/task-history.json`，重启后恢复最近任务历史；前端内部错误提示展示 `error_id` 并尝试复制，新增 Termux/本机启动脚本。

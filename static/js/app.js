@@ -37,7 +37,16 @@ async function api(path, options = {}){
     location.href = "/auth?next=" + encodeURIComponent(location.pathname + location.search);
     throw new Error("需要 Web Token");
   }
-  if (!res.ok || data.success === false) throw new Error(data.error || data.message || "请求失败");
+  if (!res.ok || data.success === false) {
+    const message = data.error || data.message || "请求失败";
+    if (data.error_id) {
+      if (navigator.clipboard) navigator.clipboard.writeText(data.error_id).catch(() => {});
+      const err = new Error(`${message}（错误 ID: ${data.error_id}）`);
+      err.errorId = data.error_id;
+      throw err;
+    }
+    throw new Error(message);
+  }
   return data.data;
 }
 

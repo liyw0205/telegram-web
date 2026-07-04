@@ -33,6 +33,12 @@ pip install -r requirements.txt
 python app.py
 ```
 
+Termux 或本机 shell 可使用仓库内脚本：
+
+```bash
+sh scripts/run-termux.sh
+```
+
 默认访问：
 
 ```bash
@@ -83,6 +89,7 @@ TELEGRAM_WEB_HOST=0.0.0.0 TELEGRAM_WEB_TOKEN=your-strong-token python app.py
 - 首次登录需要验证码
 - 使用代理时请确保 SOCKS5 可用
 - 媒体缓存会按上限自动清理
+- 终态下载/预览任务会记录到 `data/task-history.json`，重启后可继续在下载页看到最近历史
 - `data/`、`Download/`、`Pictures/` 和 `.session` 文件是本地运行数据，不要提交到 Git
 - 当前登录页开放手机号登录、验证码、2FA、StringSession 导入导出和 `.session` 文件导入导出
 - 对外开放前必须设置强 Web Token，并只在可信网络中使用
@@ -91,7 +98,9 @@ TELEGRAM_WEB_HOST=0.0.0.0 TELEGRAM_WEB_TOKEN=your-strong-token python app.py
 
 - 推荐先在本机 `127.0.0.1` 完成登录，再按需设置 `TELEGRAM_WEB_TOKEN` 对外访问。
 - Termux 后台运行可使用 `tmux`、`screen` 或用户自己的进程管理方式，环境变量仍按上文设置。
+- 例如：先执行 `tmux new -s telegram-web`，再运行 `sh scripts/run-termux.sh`；退出查看时用 `tmux attach -t telegram-web`。
 - 需要备份时复制 `data/config.json` 和当前 `.session` 文件；如果使用 StringSession，可在登录页导出文本后离线保存。
+- 如需保留任务历史，可一并备份 `data/task-history.json`。
 - 恢复时先安装依赖，再导入 StringSession 或 `.session` 文件，确认 `/api/status` 授权状态正常。
 - 反向代理只转发到本机监听地址；不要让未设置 Web Token 的服务直接暴露到外部网络。
 

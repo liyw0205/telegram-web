@@ -1,5 +1,6 @@
 import sys
 import time
+import json
 from io import BytesIO
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -93,6 +94,32 @@ class CoreHelpersTest(unittest.TestCase):
             self.assertEqual(store.get(failed_id)["status"], "error")
             self.assertEqual(store.get(failed_id)["error"], "boom")
             self.assertNotIn(failed_id, controls)
+
+    def test_task_store_persists_sanitized_terminal_history(self):
+        with TemporaryDirectory() as tmp:
+            history_file = Path(tmp) / "task-history.json"
+            store = webapp.TaskStore(history_file=history_file)
+            task_id = store.create("download_media", {"peer": "secret-peer", "msg_id": 123})
+            store.update(task_id, status="done", progress=100, file="/private/path/video.mp4", path="/private/path/video.mp4", downloaded=10, total=10)
+
+            rows = json.loads(history_file.read_text("utf-8"))
+            self.assertEqual(rows[0]["id"], task_id)
+            self.assertEqual(rows[0]["file"], "video.mp4")
+            self.assertEqual(rows[0]["path"], "")
+            self.assertEqual(rows[0]["meta"], {})
+            self.assertNotIn("secret-peer", history_file.read_text("utf-8"))
+
+            restored = webapp.TaskStore(history_file=history_file, load_history=True)
+            self.assertEqual(restored.get(task_id)["status"], "done")
+            self.assertEqual(restored.get(task_id)["file"], "video.mp4")
+
+    def test_task_store_does_not_persist_active_tasks(self):
+        with TemporaryDirectory() as tmp:
+            history_file = Path(tmp) / "task-history.json"
+            store = webapp.TaskStore(history_file=history_file)
+            task_id = store.create("download_media")
+            store.update(task_id, status="running", progress=20)
+            self.assertFalse(history_file.exists())
 
     def test_public_config_redacts_secret_fields(self):
         cfg = {
@@ -371,6 +398,18 @@ class FlaskBoundaryTest(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertFalse(store.get(task_id))
             self.assertTrue(controls[task_id]["canceled"])
+
+    def test_task_delete_terminal_record_clears_control_state(self):
+        store = webapp.TaskStore()
+        controls = {}
+        task_id = store.create("download_media")
+        controls[task_id] = {"paused": True, "canceled": False}
+        store.update(task_id, status="done")
+        with patch.object(webapp, "tasks", store), patch.object(webapp, "task_controls", controls):
+            response = self.client.delete(f"/api/task/{task_id}")
+            self.assertEqual(response.status_code, 200)
+            self.assertFalse(store.get(task_id))
+            self.assertNotIn(task_id, controls)
 
     def test_pause_rejects_terminal_task(self):
         store = webapp.TaskStore()
