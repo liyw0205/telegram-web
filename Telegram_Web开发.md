@@ -50,6 +50,8 @@
 | `tests/frontend_smoke.js` | 纯 Node 前端行为 smoke，按确认弹窗、媒体查看器、登录页/API、session/任务确认和下载页分组，在 mock 浏览器环境验证自定义敏感确认、键盘焦点循环、媒体查看器键盘交互和焦点循环、导出令牌、API 错误、登录页配置和下载页状态 |
 | `docs/browser-smoke.md` | 真实浏览器手动 smoke 验证清单和后续 Playwright 引入边界 |
 | `scripts/check-browser-smoke-env.sh` | 检查当前 shell 是否具备浏览器自动化 smoke 条件，不安装依赖 |
+| `docs/runtime-runbook.md` | 启动、访问、日志观察、Web Token 和常见故障排查清单 |
+| `scripts/diagnose-runtime.sh` | 本机运行预检脚本，不读取运行配置和凭据 |
 | `docs/progress/` | 每阶段开发进度文档 |
 | `docs/handoff/` | 每阶段会话交接文档，`LATEST.md` 指向/承载最新交接内容 |
 
@@ -481,3 +483,5 @@ rg -n "api\\(|fetch\\(|io\\(|/api/|socket|downloadMedia|prepareMedia|send" stati
 2026-07-05：Phase 15 重组纯 Node 前端 smoke，抽出元素 ID、焦点和键盘断言 helper，并按确认弹窗、媒体查看器、登录/API、session/任务确认和下载页分组执行，保持无前端测试依赖。
 
 2026-07-05：Phase 16 评估真实浏览器 smoke 条件，新增环境检查脚本和手动浏览器 smoke 清单；当前环境缺少 Playwright/浏览器命令，因此不引入新 npm 依赖。
+
+2026-07-05：Phase 17 补充运行诊断脚本和运行排障 runbook，覆盖启动环境、Web Token、日志、常见故障和服务化边界；不新增守护进程依赖。

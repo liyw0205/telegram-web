@@ -43,6 +43,8 @@ git diff --check
 
 真实浏览器 smoke 目前作为可选手动验证：先运行 `sh scripts/check-browser-smoke-env.sh` 查看本机是否具备自动化条件，再按 `docs/browser-smoke.md` 执行页面和键盘交互清单。
 
+运行前可执行 `sh scripts/diagnose-runtime.sh` 做本机依赖、语法和启动环境预检；详细排障流程见 `docs/runtime-runbook.md`。
+
 ## 运行
 
 ```bash
