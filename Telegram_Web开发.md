@@ -108,6 +108,7 @@ data/uploads/
 | `POST /api/login/code` | 提交验证码 |
 | `POST /api/login/password` | 提交 2FA 密码 |
 | `POST /api/logout` | 退出登录 |
+| `GET /api/diagnostics` | 返回脱敏运行诊断状态，不暴露 `api_hash`、StringSession、`.session` 内容、Web Token 或代理凭据 |
 | `POST /api/session/export-token` | 生成 60 秒一次性 session 导出令牌，类型为 `string` 或 `file` |
 | `GET/POST /api/session/string` | 导出或导入 StringSession；导出必须带一次性 `export_token` |
 | `GET/POST /api/session/file` | 导出或导入 `.session` 文件；导出必须带一次性 `export_token` |
@@ -485,3 +486,5 @@ rg -n "api\\(|fetch\\(|io\\(|/api/|socket|downloadMedia|prepareMedia|send" stati
 2026-07-05：Phase 16 评估真实浏览器 smoke 条件，新增环境检查脚本和手动浏览器 smoke 清单；当前环境缺少 Playwright/浏览器命令，因此不引入新 npm 依赖。
 
 2026-07-05：Phase 17 补充运行诊断脚本和运行排障 runbook，覆盖启动环境、Web Token、日志、常见故障和服务化边界；不新增守护进程依赖。
+
+2026-07-05：Phase 18 新增 `/api/diagnostics` 脱敏诊断状态接口，并让运行诊断脚本支持可选 HTTP 探测；测试扩展到 50 个，覆盖诊断输出不泄露 secret。

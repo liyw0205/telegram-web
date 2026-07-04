@@ -45,6 +45,8 @@ git diff --check
 
 运行前可执行 `sh scripts/diagnose-runtime.sh` 做本机依赖、语法和启动环境预检；详细排障流程见 `docs/runtime-runbook.md`。
 
+服务启动后可访问 `GET /api/diagnostics` 查看脱敏运行状态。该接口只返回配置是否存在、secret 是否已保存、Token 来源、host/port 和运行目录状态，不返回 `api_hash`、StringSession、`.session` 内容、Web Token 或代理凭据。
+
 ## 运行
 
 ```bash
@@ -118,6 +120,7 @@ TELEGRAM_WEB_HOST=0.0.0.0 TELEGRAM_WEB_TOKEN=your-strong-token python app.py
 - API 内部错误会返回 `error_id`，前端会在提示中展示并尝试复制到剪贴板。
 - 前台运行时可在服务端终端日志中搜索：`internal api error <error_id>`。
 - 使用 `tmux` 时先执行 `tmux attach -t telegram-web` 回到运行窗口，再按错误 ID 检索当前终端缓冲或用户自己的日志文件。
+- 可用 `TELEGRAM_WEB_DIAGNOSTICS_URL=http://127.0.0.1:5000/api/diagnostics sh scripts/diagnose-runtime.sh` 对运行中的脱敏诊断接口做可选 HTTP 探测。
 
 ## 部署和备份
 

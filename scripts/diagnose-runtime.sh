@@ -152,6 +152,58 @@ if has_cmd node; then
   fi
 fi
 
+printf '\nHTTP diagnostics:\n'
+diagnostics_url="${TELEGRAM_WEB_DIAGNOSTICS_URL:-}"
+if [ -z "$diagnostics_url" ]; then
+  printf 'info: set TELEGRAM_WEB_DIAGNOSTICS_URL to probe a running /api/diagnostics endpoint\n'
+elif has_cmd python; then
+  if TELEGRAM_WEB_DIAGNOSTICS_URL="$diagnostics_url" TELEGRAM_WEB_TOKEN_VALUE="$env_token" python - <<'PY'
+import json
+import os
+import sys
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
+
+url = os.environ.get("TELEGRAM_WEB_DIAGNOSTICS_URL", "")
+token = os.environ.get("TELEGRAM_WEB_TOKEN_VALUE", "")
+headers = {}
+if token:
+    headers["X-Web-Telegram-Token"] = token
+
+try:
+    with urlopen(Request(url, headers=headers), timeout=5) as resp:
+        status = resp.status
+        payload = json.loads(resp.read().decode("utf-8"))
+except HTTPError as exc:
+    print(f"http_status={exc.code}")
+    raise SystemExit(2)
+except (OSError, URLError, json.JSONDecodeError) as exc:
+    print(f"http_probe_error={type(exc).__name__}")
+    raise SystemExit(2)
+
+data = payload.get("data") if isinstance(payload, dict) else None
+if status != 200 or not isinstance(data, dict):
+    print(f"http_status={status}")
+    raise SystemExit(2)
+
+config = data.get("config", {})
+auth = data.get("web_auth", {})
+runtime = data.get("runtime", {})
+print(f"http_status={status}")
+print(f"config_exists={bool(config.get('exists'))}")
+print(f"web_auth_enabled={bool(auth.get('enabled'))}")
+print(f"web_auth_source={auth.get('source', 'unknown')}")
+print(f"runtime_loopback={bool(runtime.get('loopback'))}")
+PY
+  then
+    ok "HTTP diagnostics probe succeeded"
+  else
+    warn "HTTP diagnostics probe failed; endpoint may be down, protected by a non-environment Token, or not returning diagnostics JSON"
+  fi
+else
+  warn "python command is missing; HTTP diagnostics probe skipped"
+fi
+
 printf '\nSummary:\n'
 if [ "$failures" -gt 0 ]; then
   printf 'failures=%s warnings=%s\n' "$failures" "$warnings"

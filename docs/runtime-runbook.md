@@ -14,6 +14,14 @@ sh scripts/diagnose-runtime.sh
 
 脚本只检查仓库文件、命令、Python 依赖导入、语法、前端语法和启动环境变量形状，不读取 `data/config.json`，不打印 Token、StringSession、`.session`、代理凭据或 Telegram API 凭据。
 
+服务已启动时，可选探测脱敏诊断接口：
+
+```sh
+TELEGRAM_WEB_DIAGNOSTICS_URL=http://127.0.0.1:5000/api/diagnostics sh scripts/diagnose-runtime.sh
+```
+
+如果服务使用 `TELEGRAM_WEB_TOKEN` 或 `WEB_TELEGRAM_TOKEN` 环境变量，脚本会通过 header 发送 Token，但不会打印 Token 或完整 URL。如果服务只使用保存在 `data/config.json` 中的 Web Token，脚本不会读取该文件，HTTP 探测会提示鉴权失败或探测失败。
+
 如需确认真实浏览器自动化条件：
 
 ```sh
@@ -73,6 +81,26 @@ curl -H "X-Web-Telegram-Token: $TELEGRAM_WEB_TOKEN" http://127.0.0.1:5000/api/st
 
 不要把带真实 Token 的完整 URL、Cookie 或命令历史提交到仓库。
 
+## 脱敏诊断接口
+
+运行中可访问：
+
+```sh
+curl -H "X-Web-Telegram-Token: $TELEGRAM_WEB_TOKEN" http://127.0.0.1:5000/api/diagnostics
+```
+
+返回内容只包含状态和布尔值：
+
+- 配置文件是否已存在。
+- `api_id`、`api_hash`、手机号、代理、StringSession、`.session` 文件、Web Token 是否已配置或已保存。
+- 代理是否包含凭据，仅返回 `proxy_redacted`，不返回代理原文。
+- 当前 `session_type`、下载线程数、缓存上限。
+- Web Token 是否启用，以及来源是环境变量、配置文件还是未启用。
+- 当前 host、port、是否 loopback。
+- 运行目录和任务历史文件是否存在。
+
+该接口不返回 `api_hash`、手机号原文、代理 URL、代理用户名/密码、StringSession、`.session` 文件路径或内容、Web Token、Cookie 或导出令牌。
+
 ## 日志
 
 前台运行时，Flask、Socket.IO 和应用错误日志会输出在当前终端。
@@ -116,6 +144,7 @@ grep 'internal api error err-id-here' "$HOME/telegram-web-logs/server.log"
 - 对外监听启动失败：非本机监听必须设置 `TELEGRAM_WEB_TOKEN`，或先在本机 `/login` 保存 Web Token。
 - 页面跳到 `/auth`：服务启用了 Web Token；输入 Token 后会写入本地 Cookie。
 - API 返回 `需要 Web Token`：请求缺少有效 Token；使用 `/auth`、`Authorization` header 或 `X-Web-Telegram-Token` header。
+- `/api/diagnostics` 探测失败：确认服务正在运行；如启用了 Web Token，优先用 `TELEGRAM_WEB_TOKEN` 环境变量启动，或手动通过 header 访问。
 - API 返回 `Telegram 未登录`：先打开 `/login` 完成手机号、验证码和 2FA 登录，或导入 StringSession / `.session`。
 - 代理错误：仅支持 `socks4://` 或 `socks5://`，不能带 path、query 或 fragment。
 - 下载页没有历史：只有终态下载/预览任务会写入 `data/task-history.json`，运行中任务不会持久化。

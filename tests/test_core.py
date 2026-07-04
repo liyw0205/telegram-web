@@ -146,6 +146,50 @@ class CoreHelpersTest(unittest.TestCase):
         self.assertTrue(public["proxy_saved"])
         self.assertTrue(public["proxy_redacted"])
 
+    def test_diagnostics_snapshot_redacts_secret_values(self):
+        with TemporaryDirectory() as tmp:
+            data_dir = Path(tmp) / "data"
+            data_dir.mkdir()
+            config_file = data_dir / "config.json"
+            task_history_file = data_dir / "task-history.json"
+            session_file = data_dir / "account.session"
+            session_file.write_bytes(b"session-bytes")
+            cfg = {
+                **webapp.DEFAULT_CONFIG,
+                "api_id": 123,
+                "api_hash": "abcdefabcdefabcdefabcdefabcdefab",
+                "phone": "+1234567890",
+                "proxy": "socks5://user-secret:pass-secret@127.0.0.1:1080",
+                "session_type": "string",
+                "session_file": str(data_dir / "account"),
+                "string_session": "string-session-secret",
+                "web_token": "config-token-secret",
+            }
+            with patch.object(webapp, "DATA_DIR", data_dir), \
+                 patch.object(webapp, "CONFIG_FILE", config_file), \
+                 patch.object(webapp, "TASK_HISTORY_FILE", task_history_file), \
+                 patch.dict(webapp.os.environ, {"TELEGRAM_WEB_TOKEN": "env-token-secret"}, clear=True):
+                webapp.save_config(cfg)
+                data = webapp.diagnostics_snapshot()
+
+        blob = json.dumps(data, ensure_ascii=False)
+        for secret in ("abcdefabcdefabcdefabcdefabcdefab", "+1234567890", "user-secret", "pass-secret", "string-session-secret", "config-token-secret", "env-token-secret", "account.session"):
+            self.assertNotIn(secret, blob)
+        self.assertTrue(data["config"]["exists"])
+        self.assertTrue(data["config"]["api_id_configured"])
+        self.assertTrue(data["config"]["api_hash_saved"])
+        self.assertTrue(data["config"]["phone_configured"])
+        self.assertTrue(data["config"]["proxy_saved"])
+        self.assertTrue(data["config"]["proxy_redacted"])
+        self.assertEqual(data["config"]["session_type"], "string")
+        self.assertTrue(data["config"]["session_file_saved"])
+        self.assertTrue(data["config"]["session_file_exists"])
+        self.assertTrue(data["config"]["string_session_saved"])
+        self.assertTrue(data["web_auth"]["enabled"])
+        self.assertEqual(data["web_auth"]["source"], "environment")
+        self.assertTrue(data["web_auth"]["env_token_set"])
+        self.assertTrue(data["web_auth"]["config_token_saved"])
+
     def test_run_host_and_port_defaults_and_env(self):
         with patch.dict(webapp.os.environ, {}, clear=True):
             self.assertEqual(webapp.run_host(), "127.0.0.1")
@@ -376,6 +420,34 @@ class FlaskBoundaryTest(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.get_json()["error"], "Telegram 未登录")
 
+    def test_diagnostics_api_returns_only_redacted_state(self):
+        with TemporaryDirectory() as tmp:
+            data_dir = Path(tmp) / "data"
+            data_dir.mkdir()
+            config_file = data_dir / "config.json"
+            cfg = {
+                **webapp.DEFAULT_CONFIG,
+                "api_id": 123,
+                "api_hash": "abcdefabcdefabcdefabcdefabcdefab",
+                "phone": "+1234567890",
+                "proxy": "socks5://user-secret:pass-secret@127.0.0.1:1080",
+                "session_file": str(data_dir / "telegram"),
+                "string_session": "string-session-secret",
+                "web_token": "config-token-secret",
+            }
+            with patch.object(webapp, "DATA_DIR", data_dir), patch.object(webapp, "CONFIG_FILE", config_file):
+                webapp.save_config(cfg)
+                response = self.client.get("/api/diagnostics", headers={"X-Web-Telegram-Token": "config-token-secret"})
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()["data"]
+        blob = json.dumps(data, ensure_ascii=False)
+        for secret in ("abcdefabcdefabcdefabcdefabcdefab", "+1234567890", "user-secret", "pass-secret", "string-session-secret", "config-token-secret"):
+            self.assertNotIn(secret, blob)
+        self.assertTrue(data["config"]["api_hash_saved"])
+        self.assertTrue(data["config"]["proxy_redacted"])
+        self.assertTrue(data["web_auth"]["enabled"])
+
     def test_import_session_file_updates_config_without_connecting(self):
         with TemporaryDirectory() as tmp:
             data_dir = Path(tmp) / "data"
@@ -494,6 +566,12 @@ class WebAuthTest(unittest.TestCase):
             self.assertFalse(response.get_json()["success"])
 
             response = self.client.get("/api/tasks", headers={"X-Web-Telegram-Token": "12345678"})
+            self.assertEqual(response.status_code, 200)
+            self.assertTrue(response.get_json()["success"])
+
+            response = self.client.get("/api/diagnostics")
+            self.assertEqual(response.status_code, 401)
+            response = self.client.get("/api/diagnostics", headers={"X-Web-Telegram-Token": "12345678"})
             self.assertEqual(response.status_code, 200)
             self.assertTrue(response.get_json()["success"])
 

@@ -205,6 +205,63 @@ def public_config(cfg):
     return data
 
 
+def diagnostics_snapshot():
+    config_exists = CONFIG_FILE.exists()
+    cfg = load_config()
+    public = public_config(cfg)
+    env_token_set = bool((os.environ.get("TELEGRAM_WEB_TOKEN") or os.environ.get("WEB_TELEGRAM_TOKEN") or "").strip())
+    config_token_set = bool(public.get("web_token_saved"))
+    token_source = "environment" if env_token_set else ("config" if config_token_set else "none")
+    host = run_host()
+    try:
+        port = run_port()
+        port_valid = 1 <= port <= 65535
+    except Exception:
+        port = str(os.environ.get("TELEGRAM_WEB_PORT") or os.environ.get("PORT") or "")
+        port_valid = False
+    try:
+        session_file_exists = session_storage_path(cfg).is_file()
+    except Exception:
+        session_file_exists = False
+    return {
+        "config": {
+            "exists": config_exists,
+            "api_id_configured": bool(cfg.get("api_id")),
+            "api_hash_saved": bool(public.get("api_hash_saved")),
+            "phone_configured": bool(cfg.get("phone")),
+            "proxy_saved": bool(public.get("proxy_saved")),
+            "proxy_redacted": bool(public.get("proxy_redacted")),
+            "session_type": cfg.get("session_type") if cfg.get("session_type") in ("file", "string") else "file",
+            "session_file_saved": bool(public.get("session_file_saved")),
+            "session_file_exists": session_file_exists,
+            "string_session_saved": bool(public.get("string_session_saved")),
+            "download_threads": cfg.get("download_threads"),
+            "cache_limit_mb": cfg.get("cache_limit_mb"),
+        },
+        "web_auth": {
+            "enabled": env_token_set or config_token_set,
+            "source": token_source,
+            "env_token_set": env_token_set,
+            "config_token_saved": config_token_set,
+        },
+        "runtime": {
+            "host": host,
+            "port": port,
+            "port_valid": port_valid,
+            "loopback": is_loopback_host(host),
+            "external_bind_requires_token": not is_loopback_host(host),
+        },
+        "paths": {
+            "data_dir_exists": DATA_DIR.exists(),
+            "download_dir_exists": DOWNLOAD_DIR.exists(),
+            "pictures_dir_exists": PICTURES_DIR.exists(),
+            "cache_dir_exists": CACHE_DIR.exists(),
+            "upload_dir_exists": UPLOAD_DIR.exists(),
+            "task_history_exists": TASK_HISTORY_FILE.exists(),
+        },
+    }
+
+
 def proxy_has_credentials(proxy_url):
     try:
         parsed = urlparse(str(proxy_url or "").strip())
@@ -1237,6 +1294,14 @@ def api_config():
             else:
                 resp.delete_cookie(AUTH_COOKIE)
         return resp
+    except Exception as e:
+        return fail(e)
+
+
+@app.route("/api/diagnostics")
+def api_diagnostics():
+    try:
+        return ok(diagnostics_snapshot())
     except Exception as e:
         return fail(e)
 
