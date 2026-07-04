@@ -65,7 +65,7 @@ http://127.0.0.1:5000
 
 ## Web Token 和访问
 
-默认监听 `127.0.0.1`，仅本机访问。对外监听时必须先设置 Web Token：
+默认监听 `127.0.0.1`，仅本机访问。对外监听时必须先有有效 Web Token；推荐用环境变量提供：
 
 ```sh
 TELEGRAM_WEB_HOST=0.0.0.0 TELEGRAM_WEB_TOKEN='replace-with-strong-token' sh scripts/run-termux.sh
@@ -164,6 +164,25 @@ grep 'internal api error err-id-here' "$HOME/telegram-web-logs/server.log"
 - 代理错误：仅支持 `socks4://` 或 `socks5://`，不能带 path、query 或 fragment。
 - 下载页没有历史：只有终态下载/预览任务会写入 `data/task-history.json`，运行中任务不会持久化。
 - 前端提示内部错误并显示错误 ID：在服务端日志中搜索 `internal api error <error_id>`。
+
+## 备份和恢复
+
+需要备份的核心运行数据：
+
+- `data/config.json`：包含 Telegram API 配置、手机号、代理配置、session 类型、下载配置，可能包含 StringSession 和 Web Token。
+- 当前文件 session：默认是 `data/telegram.session`；自定义或导入后以登录页的 Session 文件名为准，实际文件仍应位于 `data/` 下并以 `.session` 结尾。
+- `data/task-history.json`：可选，只用于恢复下载页最近终态任务历史。
+- `Download/` 和 `Pictures/`：可选，只用于保留已经下载的文件。
+
+备份文件不要提交到 Git，也不要放入公开日志或 issue。`data/config.json`、StringSession、`.session`、Web Token 和代理凭据都应按账号凭据处理。
+
+推荐恢复流程：
+
+1. 安装依赖并保持默认本机监听：`pip install -r requirements.txt`，然后 `sh scripts/run-termux.sh`。
+2. 放回 `data/config.json` 和对应的 `data/*.session` 文件，或打开 `/login` 导入 StringSession / `.session` 文件。
+3. 如果配置中启用了 Web Token，先通过 `/auth` 输入 Token；如果对外监听，优先改用 `TELEGRAM_WEB_TOKEN` 环境变量启动。
+4. 打开 `/api/status` 或页面顶部状态，确认 Telegram 授权状态正常。
+5. 如恢复 `data/task-history.json`、`Download/` 或 `Pictures/`，确认下载页只显示预期的历史和文件。
 
 ## 服务化边界
 

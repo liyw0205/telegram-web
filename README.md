@@ -81,19 +81,19 @@ sh scripts/run-termux.sh
 http://127.0.0.1:5000
 ```
 
-默认仅监听 `127.0.0.1`。如确需对局域网开放，请显式设置：
+默认仅监听 `127.0.0.1`。如已在本机 `/login` 保存 Web Token，确需对局域网开放时可显式设置：
 
 ```bash
 TELEGRAM_WEB_HOST=0.0.0.0 TELEGRAM_WEB_PORT=5000 python app.py
 ```
 
-对外监听必须同时设置 Web Token，否则服务会拒绝启动：
+对外监听必须已有 Web Token，否则服务会拒绝启动。更推荐用环境变量提供 Token：
 
 ```bash
-TELEGRAM_WEB_HOST=0.0.0.0 TELEGRAM_WEB_TOKEN=your-strong-token python app.py
+TELEGRAM_WEB_HOST=0.0.0.0 TELEGRAM_WEB_PORT=5000 TELEGRAM_WEB_TOKEN=your-strong-token python app.py
 ```
 
-也可以先在本机打开 `/login`，保存 `Web Token` 后再对外监听。设置 Token 后，页面、API、媒体缓存和下载文件都会要求通过 `/auth` 验证。
+也可以先在本机打开 `/login`，保存 `Web Token` 后再对外监听。Token 来源优先级为 `TELEGRAM_WEB_TOKEN`、`WEB_TELEGRAM_TOKEN`、`data/config.json` 中保存的 `web_token`；对外访问推荐使用环境变量。设置 Token 后，页面、API、媒体缓存和下载文件都会要求通过 `/auth` 验证。
 
 ## 配置
 
@@ -143,9 +143,11 @@ TELEGRAM_WEB_HOST=0.0.0.0 TELEGRAM_WEB_TOKEN=your-strong-token python app.py
 - 推荐先在本机 `127.0.0.1` 完成登录，再按需设置 `TELEGRAM_WEB_TOKEN` 对外访问。
 - Termux 后台运行可使用 `tmux`、`screen` 或用户自己的进程管理方式，环境变量仍按上文设置。
 - 例如：先执行 `tmux new -s telegram-web`，再运行 `sh scripts/run-termux.sh`；退出查看时用 `tmux attach -t telegram-web`。
-- 需要备份时复制 `data/config.json` 和当前 `.session` 文件；如果使用 StringSession，可在登录页导出文本后离线保存。
+- 需要备份时复制 `data/config.json` 和当前 session 存储文件；默认文件 session 为 `data/telegram.session`，自定义或导入后以登录页的 Session 文件名为准。
+- `data/config.json` 可能包含 `api_hash`、手机号、代理、StringSession 和 Web Token，备份文件应离线保存，不要提交到 Git。
+- 如果使用 StringSession，可在登录页导出文本后离线保存；如果使用文件 session，备份对应的 `data/*.session` 文件。
 - 如需保留任务历史，可一并备份 `data/task-history.json`。
-- 恢复时先安装依赖，再导入 StringSession 或 `.session` 文件，确认 `/api/status` 授权状态正常。
+- 恢复时先安装依赖，再放回 `data/config.json` 和 session 文件，或通过登录页导入 StringSession / `.session` 文件；如果启用了 Web Token，先通过 `/auth` 验证，再确认 `/api/status` 授权状态正常。
 - 反向代理只转发到本机监听地址；不要让未设置 Web Token 的服务直接暴露到外部网络。
 
 ## 说明

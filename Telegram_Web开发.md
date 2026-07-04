@@ -510,3 +510,5 @@ rg -n "api\\(|fetch\\(|io\\(|/api/|socket|downloadMedia|prepareMedia|send" stati
 2026-07-05：Phase 27 将 Phase 21-26 的登录、会话列表、聊天页、下载页、诊断页、全局反馈和媒体查看器可访问性检查收口到手动浏览器 smoke 清单，继续不引入 Playwright/npm 依赖。
 
 2026-07-05：Phase 28 同步 README 和运行 runbook 的验证入口，补齐诊断脚本、可选 `/api/diagnostics` 探测、手动浏览器 smoke 入口、Web Token 和 `data/config.json` 边界说明；未改运行逻辑或脚本行为。
+
+2026-07-05：Phase 29 对齐 README 和运行 runbook 的启动、对外监听、Web Token 来源优先级、备份与恢复说明，新增 runbook 备份恢复章节；未改运行逻辑、测试或脚本行为。
