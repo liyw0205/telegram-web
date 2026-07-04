@@ -50,6 +50,11 @@ const DIAGNOSTICS_ELEMENT_IDS = [
   "diagnosticsPaths",
 ];
 
+const DIALOG_ELEMENT_IDS = [
+  "dialogList",
+  "dialogSearch",
+];
+
 const CHAT_ELEMENT_IDS = [
   "messageList",
   "messageInput",
@@ -82,6 +87,7 @@ const DEFAULT_ELEMENT_IDS = [
   ...LOGIN_ELEMENT_IDS,
   ...DOWNLOAD_ELEMENT_IDS,
   ...DIAGNOSTICS_ELEMENT_IDS,
+  ...DIALOG_ELEMENT_IDS,
   ...CHAT_ELEMENT_IDS,
   ...CONFIRM_ELEMENT_IDS,
   ...GALLERY_ELEMENT_IDS,
@@ -406,6 +412,26 @@ async function testChatMessageLoadAndSendUseAccessibleState() {
   assert.strictEqual(harness.elements.get("textComposer").getAttribute("aria-busy"), "false");
   assert.strictEqual(harness.elements.get("textComposer").getAttribute("aria-hidden"), "true");
   assert.strictEqual(harness.elements.get("messageList").appended.at(-1).getAttribute("aria-label"), "已发送消息");
+}
+
+async function testDialogListRendersAccessibleItemsAndBusyState() {
+  const harness = createHarness({
+    routes: {
+      "/api/dialogs": [
+        { name: "Alice", username: "alice", peer: "user-1", is_group: false, is_channel: false, unread_count: 3 },
+        { name: "Work", peer: "group-1", is_group: true, is_channel: false, unread_count: 0 },
+      ],
+    },
+  });
+
+  await harness.context.loadDialogs();
+
+  const list = harness.elements.get("dialogList");
+  assert.strictEqual(list.getAttribute("aria-busy"), "false");
+  assert.strictEqual(list.appended[0].getAttribute("role"), "listitem");
+  assert.strictEqual(list.appended[0].getAttribute("aria-label"), "Alice，私聊，用户名 @alice，3 条未读");
+  assert.strictEqual(list.appended[0].href, "/chat/user-1");
+  assert(list.appended[0].innerHTML.includes('aria-label="未读 3 条"'));
 }
 
 async function testGalleryFocusTrapCyclesWithinViewerControls() {
@@ -802,6 +828,12 @@ const TEST_GROUPS = [
     name: "chat messages",
     tests: [
       testChatMessageLoadAndSendUseAccessibleState,
+    ],
+  },
+  {
+    name: "dialogs",
+    tests: [
+      testDialogListRendersAccessibleItemsAndBusyState,
     ],
   },
   {

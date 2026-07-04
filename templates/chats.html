@@ -1,12 +1,14 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="mobile-panel">
+<section class="mobile-panel" aria-labelledby="dialogsTitle">
   <div class="page-title-row">
-    <div><h1>会话</h1><p>选择一个会话进入聊天</p></div>
-    <button class="round-btn" onclick="loadDialogs()">↻</button>
+    <div><h1 id="dialogsTitle">会话</h1><p>选择一个会话进入聊天</p></div>
+    <button class="round-btn" type="button" onclick="loadDialogs()" aria-label="刷新会话列表" title="刷新会话列表">↻</button>
   </div>
-  <div class="search-wrap"><input id="dialogSearch" placeholder="搜索会话、用户名、ID" oninput="filterDialogs()"></div>
-  <div id="dialogList" class="dialog-list"></div>
+  <div class="search-wrap" role="search" aria-label="搜索会话">
+    <input id="dialogSearch" type="search" placeholder="搜索会话、用户名、ID" oninput="filterDialogs()" aria-label="搜索会话、用户名或 ID" aria-controls="dialogList" autocomplete="off">
+  </div>
+  <div id="dialogList" class="dialog-list" role="list" aria-labelledby="dialogsTitle" aria-live="polite" aria-busy="true"></div>
 </section>
 {% endblock %}
 {% block scripts %}<script>initDialogListPage();</script>{% endblock %}

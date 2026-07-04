@@ -321,6 +321,20 @@ class FlaskBoundaryTest(unittest.TestCase):
         ):
             self.assertIn(fragment, html)
 
+    def test_chats_page_has_accessible_dialog_list_semantics(self):
+        response = self.client.get("/chats")
+        self.addCleanup(response.close)
+        html = response.get_data(as_text=True)
+        for fragment in (
+            '<section class="mobile-panel" aria-labelledby="dialogsTitle">',
+            '<h1 id="dialogsTitle">会话</h1>',
+            'onclick="loadDialogs()" aria-label="刷新会话列表" title="刷新会话列表"',
+            '<div class="search-wrap" role="search" aria-label="搜索会话">',
+            'id="dialogSearch" type="search" placeholder="搜索会话、用户名、ID" oninput="filterDialogs()" aria-label="搜索会话、用户名或 ID" aria-controls="dialogList" autocomplete="off"',
+            'id="dialogList" class="dialog-list" role="list" aria-labelledby="dialogsTitle" aria-live="polite" aria-busy="true"',
+        ):
+            self.assertIn(fragment, html)
+
     def test_downloads_page_has_accessible_status_semantics(self):
         response = self.client.get("/downloads")
         self.addCleanup(response.close)

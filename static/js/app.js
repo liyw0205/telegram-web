@@ -397,22 +397,38 @@ async function exportSessionFile(){
 async function initDialogListPage(){ refreshStatus(); await loadDialogs(); }
 async function loadDialogs(){
   const box = $("dialogList"); if (!box) return;
-  box.innerHTML = `<div class="empty">加载中...</div>`;
+  setAriaBusy(box, true);
+  box.innerHTML = `<div class="empty" role="listitem">加载中...</div>`;
   try{
     DIALOGS = await api("/api/dialogs?limit=120");
     renderDialogs(DIALOGS);
-  } catch(e){ box.innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`; }
+  } catch(e){
+    box.innerHTML = `<div class="empty" role="listitem">${escapeHtml(e.message)}</div>`;
+  } finally {
+    setAriaBusy(box, false);
+  }
+}
+function dialogTypeText(d){
+  return d.is_channel ? "频道" : d.is_group ? "群组" : "私聊";
+}
+function dialogAriaLabel(d){
+  const name = d.name || d.peer || "未命名会话";
+  const username = d.username ? `，用户名 @${d.username}` : "";
+  const unread = d.unread_count ? `，${d.unread_count} 条未读` : "";
+  return `${name}，${dialogTypeText(d)}${username}${unread}`;
 }
 function renderDialogs(list){
   const box = $("dialogList"); if (!box) return;
   box.innerHTML = "";
-  if (!list.length) return box.innerHTML = `<div class="empty">暂无会话</div>`;
+  if (!list.length) return box.innerHTML = `<div class="empty" role="listitem">暂无会话</div>`;
   list.forEach(d => {
     const first = String(d.name || "?").trim().slice(0, 1).toUpperCase();
     const a = document.createElement("a");
     a.className = "dialog-item";
     a.href = "/chat/" + encodeURIComponent(d.peer);
-    a.innerHTML = `<div class="avatar">${escapeHtml(first)}</div><div style="min-width:0"><div class="dialog-name">${escapeHtml(d.name || d.peer)}</div><div class="dialog-meta">${d.username ? "@"+escapeHtml(d.username)+" · " : ""}${d.is_channel ? "频道" : d.is_group ? "群组" : "私聊"}</div></div>${d.unread_count ? `<div class="unread-badge">${d.unread_count}</div>` : ""}`;
+    a.setAttribute("role", "listitem");
+    a.setAttribute("aria-label", dialogAriaLabel(d));
+    a.innerHTML = `<div class="avatar">${escapeHtml(first)}</div><div style="min-width:0"><div class="dialog-name">${escapeHtml(d.name || d.peer)}</div><div class="dialog-meta">${d.username ? "@"+escapeHtml(d.username)+" · " : ""}${dialogTypeText(d)}</div></div>${d.unread_count ? `<div class="unread-badge" aria-label="未读 ${escapeHtml(d.unread_count)} 条">${d.unread_count}</div>` : ""}`;
     box.appendChild(a);
   });
 }
