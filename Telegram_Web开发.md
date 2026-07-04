@@ -47,6 +47,7 @@
 | `templates/downloads.html` | 下载任务和已下载文件页面 |
 | `static/js/app.js` | 前端 API 封装、Socket.IO、会话/消息/媒体/下载交互 |
 | `static/css/app.css` | 全站样式和移动端布局 |
+| `tests/frontend_smoke.js` | 纯 Node 前端行为 smoke，mock 浏览器环境验证敏感确认和导出令牌请求链 |
 | `docs/progress/` | 每阶段开发进度文档 |
 | `docs/handoff/` | 每阶段会话交接文档，`LATEST.md` 指向/承载最新交接内容 |
 
@@ -248,6 +249,14 @@ python -m unittest discover
 如果仓库尚无测试，阶段内新增共享逻辑或修复回归时，应优先补最小可运行测试。
 
 涉及前端行为时，至少记录一组浏览器手动验证：
+
+```sh
+node --check static/js/app.js
+node --check tests/frontend_smoke.js
+node tests/frontend_smoke.js
+```
+
+有真实浏览器环境时，再记录一组手动或自动验证：
 
 ```text
 打开 /login -> 检查配置加载 -> 打开 /chats -> 打开一个 /chat/<peer> -> 预览/下载媒体 -> 查看 /downloads
@@ -452,3 +461,5 @@ rg -n "api\\(|fetch\\(|io\\(|/api/|socket|downloadMedia|prepareMedia|send" stati
 2026-07-04：Phase 6 增加终态任务历史持久化到 `data/task-history.json`，重启后恢复最近任务历史；前端内部错误提示展示 `error_id` 并尝试复制，新增 Termux/本机启动脚本。
 
 2026-07-05：Phase 7 为 StringSession 和 `.session` 导出增加 60 秒一次性导出令牌，统一退出登录、导入/导出 session、取消/移除任务的前端确认语义，并补充错误 ID 日志检索说明。
+
+2026-07-05：Phase 8 增加纯 Node 前端行为 smoke 测试，不引入 Playwright/npm 依赖，覆盖确认取消不发请求、确认后申请一次性导出令牌、文件导出 URL 和任务删除确认。

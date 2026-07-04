@@ -27,6 +27,19 @@
 pip install -r requirements.txt
 ```
 
+## 验证
+
+```bash
+PYTHONPYCACHEPREFIX="${TMPDIR:-$HOME/.cache}/telegram-web-pycache" python -m py_compile app.py
+PYTHONPYCACHEPREFIX="${TMPDIR:-$HOME/.cache}/telegram-web-pycache" python -Wd -m unittest discover -v
+node --check static/js/app.js
+node --check tests/frontend_smoke.js
+node tests/frontend_smoke.js
+git diff --check
+```
+
+`tests/frontend_smoke.js` 使用纯 Node mock 浏览器环境，覆盖前端敏感操作确认、一次性 session 导出令牌请求链和任务删除确认，不需要真实 Telegram 登录或浏览器。
+
 ## 运行
 
 ```bash
