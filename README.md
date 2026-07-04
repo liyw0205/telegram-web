@@ -9,7 +9,7 @@
 - 聊天消息浏览
 - 媒体预览与下载
 - 下载任务管理（暂停 / 删除）
-- StringSession / `.session` 导入导出
+- StringSession / `.session` 导入导出（导出需一次性令牌）
 - 缓存自动清理
 - Markdown 消息渲染
 
@@ -92,7 +92,14 @@ TELEGRAM_WEB_HOST=0.0.0.0 TELEGRAM_WEB_TOKEN=your-strong-token python app.py
 - 终态下载/预览任务会记录到 `data/task-history.json`，重启后可继续在下载页看到最近历史
 - `data/`、`Download/`、`Pictures/` 和 `.session` 文件是本地运行数据，不要提交到 Git
 - 当前登录页开放手机号登录、验证码、2FA、StringSession 导入导出和 `.session` 文件导入导出
+- Session 导出前会弹出确认，并使用 60 秒一次性导出令牌；令牌使用后立即失效
 - 对外开放前必须设置强 Web Token，并只在可信网络中使用
+
+## 日志和错误 ID
+
+- API 内部错误会返回 `error_id`，前端会在提示中展示并尝试复制到剪贴板。
+- 前台运行时可在服务端终端日志中搜索：`internal api error <error_id>`。
+- 使用 `tmux` 时先执行 `tmux attach -t telegram-web` 回到运行窗口，再按错误 ID 检索当前终端缓冲或用户自己的日志文件。
 
 ## 部署和备份
 

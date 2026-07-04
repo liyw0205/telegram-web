@@ -103,8 +103,9 @@ data/uploads/
 | `POST /api/login/code` | 提交验证码 |
 | `POST /api/login/password` | 提交 2FA 密码 |
 | `POST /api/logout` | 退出登录 |
-| `GET/POST /api/session/string` | 导出或导入 StringSession |
-| `GET/POST /api/session/file` | 导出或导入 `.session` 文件 |
+| `POST /api/session/export-token` | 生成 60 秒一次性 session 导出令牌，类型为 `string` 或 `file` |
+| `GET/POST /api/session/string` | 导出或导入 StringSession；导出必须带一次性 `export_token` |
+| `GET/POST /api/session/file` | 导出或导入 `.session` 文件；导出必须带一次性 `export_token` |
 | `GET /api/dialogs` | 获取会话列表 |
 | `GET /api/messages` | 获取消息列表，支持 `offset_id` 翻页 |
 | `POST /api/send` | 发送文本消息 |
@@ -449,3 +450,5 @@ rg -n "api\\(|fetch\\(|io\\(|/api/|socket|downloadMedia|prepareMedia|send" stati
 2026-07-04：Phase 5 补充 StringSession 和 `.session` 文件导入导出，StringSession 登录成功后自动持久化，并完善 README 中部署、备份和恢复说明。
 
 2026-07-04：Phase 6 增加终态任务历史持久化到 `data/task-history.json`，重启后恢复最近任务历史；前端内部错误提示展示 `error_id` 并尝试复制，新增 Termux/本机启动脚本。
+
+2026-07-05：Phase 7 为 StringSession 和 `.session` 导出增加 60 秒一次性导出令牌，统一退出登录、导入/导出 session、取消/移除任务的前端确认语义，并补充错误 ID 日志检索说明。

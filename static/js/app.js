@@ -26,6 +26,22 @@ function toast(text){
   box.appendChild(item); setTimeout(() => item.remove(), 2400);
 }
 
+function confirmSensitive(message){
+  return confirm(message);
+}
+
+function withQuery(path, params){
+  const url = new URL(path, location.origin);
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") url.searchParams.set(key, value);
+  });
+  return url.pathname + url.search;
+}
+
+async function createSessionExportToken(kind){
+  return await api("/api/session/export-token", { method:"POST", body: JSON.stringify({ kind }) });
+}
+
 async function api(path, options = {}){
   const isForm = options.body instanceof FormData;
   const res = await fetch(path, {
@@ -163,13 +179,14 @@ async function submitPassword(){
   catch(e){ toast(e.message); }
 }
 async function logoutTelegram(){
-  if (!confirm("确认退出登录？")) return;
+  if (!confirmSensitive("确认退出 Telegram 登录？这会断开当前账号会话。")) return;
   try{ await api("/api/logout", { method:"POST", body:"{}" }); toast("已退出登录"); refreshStatus(); }
   catch(e){ toast(e.message); }
 }
 async function importStringSession(){
   const value = $("string_session")?.value.trim();
   if (!value) return toast("请先粘贴 StringSession");
+  if (!confirmSensitive("确认导入 StringSession？当前客户端会重置并切换到导入的会话。")) return;
   try{
     await api("/api/session/string", { method:"POST", body: JSON.stringify({ string_session: value }) });
     $("string_session").value = "";
@@ -178,8 +195,10 @@ async function importStringSession(){
   } catch(e){ toast(e.message); }
 }
 async function exportStringSession(){
+  if (!confirmSensitive("确认导出 StringSession？导出的文本可直接登录此 Telegram 账号。")) return;
   try{
-    const data = await api("/api/session/string");
+    const token = await createSessionExportToken("string");
+    const data = await api(withQuery("/api/session/string", { export_token: token.export_token }));
     const value = data.string_session || "";
     if (!value) return toast("当前没有 StringSession");
     $("string_session").value = value;
@@ -190,6 +209,7 @@ async function exportStringSession(){
 async function importSessionFile(){
   const file = $("sessionFileInput")?.files?.[0];
   if (!file) return toast("请选择 .session 文件");
+  if (!confirmSensitive("确认导入 .session 文件？当前客户端会重置并切换到导入的会话。")) return;
   const fd = new FormData();
   fd.append("file", file);
   try{
@@ -199,8 +219,12 @@ async function importSessionFile(){
     loadLoginPage(); refreshStatus();
   } catch(e){ toast(e.message); }
 }
-function exportSessionFile(){
-  window.open("/api/session/file", "_blank", "noopener");
+async function exportSessionFile(){
+  if (!confirmSensitive("确认导出 .session 文件？该文件可直接登录此 Telegram 账号。")) return;
+  try{
+    const token = await createSessionExportToken("file");
+    window.open(withQuery("/api/session/file", { export_token: token.export_token, token: URL_TOKEN }), "_blank", "noopener");
+  } catch(e){ toast(e.message); }
 }
 
 /* 会话 */
@@ -581,7 +605,10 @@ async function downloadMedia(msgId){
 }
 async function taskPause(id){ try{ await api(`/api/task/${id}/pause`, { method:"POST", body:"{}" }); await loadDownloadTasks(); } catch(e){ toast(e.message); } }
 async function taskResume(id){ try{ await api(`/api/task/${id}/resume`, { method:"POST", body:"{}" }); await loadDownloadTasks(); } catch(e){ toast(e.message); } }
-async function taskDelete(id){
+async function taskDelete(id, status = ""){
+  const active = ["queued", "running", "paused"].includes(status);
+  const text = active ? "确认取消这个下载/预览任务？" : "确认移除这条任务记录？";
+  if (!confirmSensitive(text)) return;
   try{
     await api(`/api/task/${id}`, { method:"DELETE" });
     await Promise.allSettled([loadDownloadTasks(), loadDownloadFiles(true)]);
@@ -602,7 +629,7 @@ async function loadDownloadTasks(){
     box.innerHTML = list.map(t => {
       const controls = t.status === "running" ? `<button class="small-btn gray" onclick="taskPause('${t.id}')">暂停</button>` : t.status === "paused" ? `<button class="small-btn" onclick="taskResume('${t.id}')">恢复</button>` : "";
       const deleteText = ["queued", "running", "paused"].includes(t.status) ? "取消" : "移除记录";
-      return `<div class="task-card"><div class="task-head"><div><div class="task-title">${escapeHtml(t.kind)} · ${escapeHtml(t.status)}</div><div class="task-meta">${escapeHtml(t.downloaded_text || "0 B")}${t.total_text ? " / " + escapeHtml(t.total_text) : ""}${t.speed_text ? " · " + escapeHtml(t.speed_text) : ""}</div></div><b>${t.progress || 0}%</b></div><div class="progress-line"><div style="width:${t.progress || 0}%"></div></div><div class="actions" style="margin-top:8px">${controls}<button class="small-btn danger" onclick="taskDelete('${t.id}')">${deleteText}</button></div></div>`;
+      return `<div class="task-card"><div class="task-head"><div><div class="task-title">${escapeHtml(t.kind)} · ${escapeHtml(t.status)}</div><div class="task-meta">${escapeHtml(t.downloaded_text || "0 B")}${t.total_text ? " / " + escapeHtml(t.total_text) : ""}${t.speed_text ? " · " + escapeHtml(t.speed_text) : ""}</div></div><b>${t.progress || 0}%</b></div><div class="progress-line"><div style="width:${t.progress || 0}%"></div></div><div class="actions" style="margin-top:8px">${controls}<button class="small-btn danger" onclick="taskDelete('${t.id}', '${escapeHtml(t.status)}')">${deleteText}</button></div></div>`;
     }).join("");
   } catch(e){ box.innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`; }
 }

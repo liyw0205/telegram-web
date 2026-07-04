@@ -221,6 +221,23 @@ class CoreHelpersTest(unittest.TestCase):
         with patch.dict(webapp.os.environ, {"TELEGRAM_WEB_TOKEN": "12345678"}, clear=True):
             webapp.ensure_safe_bind("0.0.0.0")
 
+    def test_session_export_tokens_are_single_use_and_scoped(self):
+        with patch.object(webapp, "SESSION_EXPORT_TOKEN_TTL", 1):
+            webapp.session_export_tokens.clear()
+            token = webapp.create_session_export_token("string")["export_token"]
+            with self.assertRaises(webapp.ApiError):
+                webapp.consume_session_export_token("file", token)
+
+            token = webapp.create_session_export_token("string")["export_token"]
+            webapp.consume_session_export_token("string", token)
+            with self.assertRaises(webapp.ApiError):
+                webapp.consume_session_export_token("string", token)
+
+            token = webapp.create_session_export_token("file")["export_token"]
+            webapp.session_export_tokens[token]["expires_at"] = time.time() - 1
+            with self.assertRaises(webapp.ApiError):
+                webapp.consume_session_export_token("file", token)
+
 
 class FlaskBoundaryTest(unittest.TestCase):
     def setUp(self):
@@ -240,6 +257,13 @@ class FlaskBoundaryTest(unittest.TestCase):
         response = self.client.post("/api/send", data='{"peer":"x","text":"y"}')
         self.assertEqual(response.status_code, 400)
         self.assertFalse(response.get_json()["success"])
+
+    def test_page_routes_render_without_telegram_login(self):
+        for path in ("/login", "/chats", "/chat/test-peer", "/downloads"):
+            response = self.client.get(path)
+            self.addCleanup(response.close)
+            self.assertEqual(response.status_code, 200, path)
+            self.assertIn("Web Telegram", response.get_data(as_text=True))
 
     def test_non_object_json_returns_400(self):
         response = self.client.post("/api/send", json=[])
@@ -377,11 +401,36 @@ class FlaskBoundaryTest(unittest.TestCase):
             cfg = {**webapp.DEFAULT_CONFIG, "session_file": str((data_dir / "telegram").resolve())}
             with patch.object(webapp, "DATA_DIR", data_dir), patch.object(webapp, "CONFIG_FILE", config_file):
                 webapp.save_config(cfg)
-                response = self.client.get("/api/session/file")
+                token = self.client.post("/api/session/export-token", json={"kind": "file"}).get_json()["data"]["export_token"]
+                response = self.client.get(f"/api/session/file?export_token={token}")
                 self.addCleanup(response.close)
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(response.data, b"session-bytes")
                 self.assertIn("attachment", response.headers.get("Content-Disposition", ""))
+
+                response = self.client.get(f"/api/session/file?export_token={token}")
+                self.assertEqual(response.status_code, 403)
+
+    def test_session_exports_require_one_time_token(self):
+        with TemporaryDirectory() as tmp:
+            config_file = Path(tmp) / "config.json"
+            cfg = {**webapp.DEFAULT_CONFIG, "string_session": "test-session-value"}
+            with patch.object(webapp, "CONFIG_FILE", config_file):
+                webapp.save_config(cfg)
+                response = self.client.get("/api/session/string")
+                self.assertEqual(response.status_code, 403)
+
+                token = self.client.post("/api/session/export-token", json={"kind": "string"}).get_json()["data"]["export_token"]
+                response = self.client.get(f"/api/session/string?export_token={token}")
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.get_json()["data"]["string_session"], "test-session-value")
+
+                response = self.client.get(f"/api/session/string?export_token={token}")
+                self.assertEqual(response.status_code, 403)
+
+    def test_session_export_token_rejects_invalid_kind(self):
+        response = self.client.post("/api/session/export-token", json={"kind": "bad"})
+        self.assertEqual(response.status_code, 400)
 
     def test_string_session_import_rejects_invalid_value(self):
         response = self.client.post("/api/session/string", json={"string_session": "not-a-session"})

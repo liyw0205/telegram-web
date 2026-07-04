@@ -48,6 +48,7 @@ DEFAULT_CONFIG = {
 CONFIG_FIELDS = ["api_id", "api_hash", "phone", "proxy", "session_type", "session_file", "string_session", "download_threads", "cache_limit_mb", "web_token"]
 SECRET_CONFIG_FIELDS = ["api_hash", "session_file", "string_session", "web_token"]
 AUTH_COOKIE = "telegram_web_token"
+SESSION_EXPORT_TOKEN_TTL = 60
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "web-telegram-flask"
@@ -58,6 +59,10 @@ class ApiError(ValueError):
     def __init__(self, message, code=400):
         super().__init__(message)
         self.code = code
+
+
+session_export_tokens = {}
+session_export_tokens_lock = threading.Lock()
 
 
 INTERNAL_ERROR_MESSAGE = "内部错误，请查看服务端日志"
@@ -154,6 +159,32 @@ def request_json_object():
     if not isinstance(data, dict):
         raise ApiError("请求体必须是 JSON 对象")
     return data
+
+
+def create_session_export_token(kind):
+    kind = str(kind or "").strip()
+    if kind not in ("string", "file"):
+        raise ApiError("导出类型无效")
+    token = secrets.token_urlsafe(24)
+    now = time.time()
+    with session_export_tokens_lock:
+        expired = [key for key, row in session_export_tokens.items() if row.get("expires_at", 0) <= now]
+        for key in expired:
+            session_export_tokens.pop(key, None)
+        session_export_tokens[token] = {"kind": kind, "expires_at": now + SESSION_EXPORT_TOKEN_TTL}
+    return {"export_token": token, "expires_in": SESSION_EXPORT_TOKEN_TTL}
+
+
+def consume_session_export_token(kind, token):
+    kind = str(kind or "").strip()
+    token = str(token or "").strip()
+    if not token:
+        raise ApiError("缺少一次性导出令牌", 403)
+    now = time.time()
+    with session_export_tokens_lock:
+        row = session_export_tokens.pop(token, None)
+    if not row or row.get("kind") != kind or row.get("expires_at", 0) <= now:
+        raise ApiError("一次性导出令牌无效或已过期", 403)
 
 
 def query_int_arg(name, default, min_value, max_value):
@@ -1214,6 +1245,7 @@ def api_config():
 def api_session_string():
     try:
         if request.method == "GET":
+            consume_session_export_token("string", request.args.get("export_token"))
             cfg = load_config()
             value = str(cfg.get("string_session") or "")
             if not value and tg.client:
@@ -1230,10 +1262,20 @@ def api_session_string():
         return fail(e)
 
 
+@app.route("/api/session/export-token", methods=["POST"])
+def api_session_export_token():
+    try:
+        data = request_json_object()
+        return ok(create_session_export_token(data.get("kind")))
+    except Exception as e:
+        return fail(e)
+
+
 @app.route("/api/session/file", methods=["GET", "POST"])
 def api_session_file():
     try:
         if request.method == "GET":
+            consume_session_export_token("file", request.args.get("export_token"))
             path = session_storage_path()
             if not path.exists() or not path.is_file():
                 raise ApiError("当前没有可导出的 .session 文件", 404)
