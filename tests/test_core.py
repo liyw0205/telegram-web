@@ -1,5 +1,6 @@
 import sys
 import time
+from io import BytesIO
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 import unittest
@@ -168,6 +169,22 @@ class CoreHelpersTest(unittest.TestCase):
         with self.assertRaises(webapp.ApiError):
             webapp.normalize_config_patch({"session_type": "string"}, webapp.DEFAULT_CONFIG)
 
+    def test_session_file_helpers_keep_files_under_data_dir(self):
+        config_path, stored_path = webapp.session_upload_paths("custom.session")
+        self.assertEqual(config_path, (webapp.DATA_DIR / "custom").resolve())
+        self.assertEqual(stored_path, (webapp.DATA_DIR / "custom.session").resolve())
+        with self.assertRaises(webapp.ApiError):
+            webapp.session_upload_paths("../outside.session")
+
+    def test_persist_string_session_if_needed_updates_config(self):
+        service = webapp.TelegramService.__new__(webapp.TelegramService)
+        service.cfg = {**webapp.DEFAULT_CONFIG, "session_type": "string", "string_session": ""}
+        service.client = type("Client", (), {"session": type("Session", (), {"save": lambda self: "1A"})()})()
+        saved = {}
+        with patch.object(webapp, "save_string_session_value", side_effect=lambda value, base=None: saved.setdefault("cfg", {**base, "string_session": value})):
+            self.assertTrue(service.persist_string_session_if_needed())
+        self.assertEqual(saved["cfg"]["string_session"], "1A")
+
     def test_safe_bind_requires_token_for_external_host(self):
         with patch.dict(webapp.os.environ, {}, clear=True):
             with patch.object(webapp, "load_config", return_value={**webapp.DEFAULT_CONFIG, "web_token": ""}):
@@ -307,6 +324,42 @@ class FlaskBoundaryTest(unittest.TestCase):
             response = self.client.get("/api/status")
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.get_json()["error"], "Telegram 未登录")
+
+    def test_import_session_file_updates_config_without_connecting(self):
+        with TemporaryDirectory() as tmp:
+            data_dir = Path(tmp) / "data"
+            config_file = data_dir / "config.json"
+            def close_coro(coro):
+                coro.close()
+                return {"message": "ok"}
+            with patch.object(webapp, "DATA_DIR", data_dir), patch.object(webapp, "CONFIG_FILE", config_file), patch.object(webapp.tg, "reload_config", lambda: None), patch.object(webapp.tg, "run", close_coro):
+                response = self.client.post("/api/session/file", data={"file": (BytesIO(b"session-bytes"), "imported.session")}, content_type="multipart/form-data")
+                self.assertEqual(response.status_code, 200)
+                cfg = webapp.load_config()
+                self.assertEqual(cfg["session_type"], "file")
+                self.assertEqual(cfg["session_file"], str((data_dir / "imported").resolve()))
+                self.assertEqual((data_dir / "imported.session").read_bytes(), b"session-bytes")
+
+    def test_export_session_file_downloads_current_file(self):
+        with TemporaryDirectory() as tmp:
+            data_dir = Path(tmp) / "data"
+            data_dir.mkdir()
+            config_file = data_dir / "config.json"
+            session_file = data_dir / "telegram.session"
+            session_file.write_bytes(b"session-bytes")
+            cfg = {**webapp.DEFAULT_CONFIG, "session_file": str((data_dir / "telegram").resolve())}
+            with patch.object(webapp, "DATA_DIR", data_dir), patch.object(webapp, "CONFIG_FILE", config_file):
+                webapp.save_config(cfg)
+                response = self.client.get("/api/session/file")
+                self.addCleanup(response.close)
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.data, b"session-bytes")
+                self.assertIn("attachment", response.headers.get("Content-Disposition", ""))
+
+    def test_string_session_import_rejects_invalid_value(self):
+        response = self.client.post("/api/session/string", json={"string_session": "not-a-session"})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("string_session", response.get_json()["error"])
 
     def test_task_delete_removes_record_and_keeps_cancel_signal(self):
         store = webapp.TaskStore()

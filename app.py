@@ -13,7 +13,7 @@ from pathlib import Path
 from urllib.parse import urlparse, unquote, quote
 
 import socks
-from flask import Flask, request, jsonify, render_template, redirect, send_from_directory, Response, abort, make_response
+from flask import Flask, request, jsonify, render_template, redirect, send_from_directory, send_file, Response, abort, make_response
 from flask_socketio import SocketIO
 from telethon import TelegramClient, events
 from telethon.errors import SessionPasswordNeededError
@@ -87,6 +87,7 @@ def load_config():
 
 
 def save_config(cfg):
+    CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
     CONFIG_FILE.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), "utf-8")
 
 
@@ -267,7 +268,7 @@ def normalize_proxy_url(value):
     return f"{parsed.scheme.lower()}://{auth}{parsed.hostname}:{port}"
 
 
-def normalize_config_patch(data, base=None):
+def normalize_config_patch(data, base=None, require_string_session=True):
     cfg = dict(DEFAULT_CONFIG)
     if base:
         cfg.update(base)
@@ -304,8 +305,52 @@ def normalize_config_patch(data, base=None):
                 cfg[key] = next_value
         else:
             cfg[key] = str(value or "").strip()
-    if cfg.get("session_type") == "string" and not cfg.get("string_session"):
+    if require_string_session and cfg.get("session_type") == "string" and not cfg.get("string_session"):
         raise ApiError("session_type=string 需要 string_session")
+    return cfg
+
+
+def session_file_path(cfg=None):
+    cfg = cfg or load_config()
+    return Path(cfg.get("session_file") or str(DATA_DIR / "telegram")).resolve()
+
+
+def session_storage_path(cfg=None):
+    base = session_file_path(cfg)
+    return base if base.suffix == ".session" else base.with_suffix(".session")
+
+
+def session_upload_paths(filename):
+    raw = str(filename or "telegram.session").strip() or "telegram.session"
+    if not raw.endswith(".session"):
+        raw += ".session"
+    config_path = Path(normalize_session_file(raw))
+    return config_path, session_storage_path({"session_file": str(config_path)})
+
+
+def copy_session_file_upload(upload_file):
+    if not upload_file or not upload_file.filename:
+        raise ApiError("缺少 .session 文件")
+    config_path, target = session_upload_paths(upload_file.filename)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp = target.with_name(target.name + ".upload")
+    upload_file.save(tmp)
+    try:
+        if not tmp.exists() or tmp.stat().st_size <= 0:
+            raise ApiError(".session 文件为空")
+        tmp.replace(target)
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
+    return config_path, target
+
+
+def save_string_session_value(value, base=None):
+    text = normalize_string_session(value)
+    if not text:
+        raise ApiError("string_session 不能为空")
+    cfg = normalize_config_patch({"session_type": "string", "string_session": text}, base or load_config())
+    save_config(cfg)
     return cfg
 
 
@@ -629,6 +674,15 @@ class TelegramService:
         executor_holder.reload()
         cache_cleanup(self.cfg.get("cache_limit_mb", 1024))
 
+    def persist_string_session_if_needed(self):
+        if self.cfg.get("session_type") != "string" or not self.client:
+            return False
+        value = self.client.session.save()
+        if not value:
+            return False
+        self.cfg = save_string_session_value(value, self.cfg)
+        return True
+
     def create_client(self):
         api_id = int(self.cfg.get("api_id") or 0)
         api_hash = str(self.cfg.get("api_hash") or "")
@@ -666,6 +720,13 @@ class TelegramService:
         self.client = None
         return await self.ensure_client()
 
+    async def reset_client(self):
+        if self.client:
+            try: await self.client.disconnect()
+            except Exception: pass
+        self.client = None
+        return {"message": "客户端已重置"}
+
     async def status(self):
         client = await self.ensure_client()
         authorized = await client.is_user_authorized()
@@ -675,15 +736,18 @@ class TelegramService:
             me = {"id": user.id, "username": user.username, "first_name": user.first_name, "last_name": user.last_name, "phone": user.phone}
         return {"connected": client.is_connected(), "authorized": authorized, "me": me, "config": {"api_id": self.cfg.get("api_id"), "phone": self.cfg.get("phone"), "proxy": self.cfg.get("proxy"), "session_type": self.cfg.get("session_type"), "download_threads": self.cfg.get("download_threads"), "cache_limit_mb": self.cfg.get("cache_limit_mb")}}
 
-    async def start_login(self, api_id, api_hash, phone, proxy, download_threads=16, cache_limit_mb=1024):
+    async def start_login(self, api_id, api_hash, phone, proxy, session_type="file", session_file="", string_session="", download_threads=16, cache_limit_mb=1024):
         self.cfg = normalize_config_patch({
             "api_id": api_id,
             "api_hash": api_hash,
             "phone": phone,
             "proxy": proxy,
+            "session_type": session_type,
+            "session_file": session_file,
+            "string_session": string_session,
             "download_threads": download_threads,
             "cache_limit_mb": cache_limit_mb,
-        }, self.cfg)
+        }, self.cfg, require_string_session=False)
         save_config(self.cfg)
         self.reload_config()
         await self.reconnect()
@@ -703,11 +767,13 @@ class TelegramService:
             await client.sign_in(phone=phone, code=str(code))
         except SessionPasswordNeededError:
             return {"need_password": True, "message": "需要两步验证密码"}
+        self.persist_string_session_if_needed()
         return {"need_password": False, "message": "登录成功"}
 
     async def sign_in_password(self, password):
         client = await self.ensure_client()
         await client.sign_in(password=str(password))
+        self.persist_string_session_if_needed()
         return {"message": "两步验证通过，登录成功"}
 
     async def logout(self):
@@ -1056,7 +1122,7 @@ def api_config():
         if request.method == "GET":
             return ok(public_config(load_config()))
         data = request_json_object()
-        cfg = normalize_config_patch(data, load_config())
+        cfg = normalize_config_patch(data, load_config(), require_string_session=False)
         save_config(cfg)
         tg.reload_config()
         resp = ok(public_config(cfg), "配置已保存")
@@ -1066,6 +1132,45 @@ def api_config():
             else:
                 resp.delete_cookie(AUTH_COOKIE)
         return resp
+    except Exception as e:
+        return fail(e)
+
+
+@app.route("/api/session/string", methods=["GET", "POST"])
+def api_session_string():
+    try:
+        if request.method == "GET":
+            cfg = load_config()
+            value = str(cfg.get("string_session") or "")
+            if not value and tg.client:
+                value = tg.client.session.save() or ""
+            if not value:
+                raise ApiError("当前没有可导出的 StringSession", 404)
+            return ok({"string_session": value})
+        data = request_json_object()
+        cfg = save_string_session_value(data.get("string_session", ""))
+        tg.reload_config()
+        tg.run(tg.reset_client())
+        return ok(public_config(cfg), "StringSession 已导入")
+    except Exception as e:
+        return fail(e)
+
+
+@app.route("/api/session/file", methods=["GET", "POST"])
+def api_session_file():
+    try:
+        if request.method == "GET":
+            path = session_storage_path()
+            if not path.exists() or not path.is_file():
+                raise ApiError("当前没有可导出的 .session 文件", 404)
+            return send_file(path, as_attachment=True, download_name=path.name, mimetype="application/octet-stream")
+        config_path, stored_path = copy_session_file_upload(request.files.get("file"))
+        cfg = normalize_config_patch({"session_type": "file", "session_file": stored_path.name}, load_config())
+        cfg["session_file"] = str(config_path)
+        save_config(cfg)
+        tg.reload_config()
+        tg.run(tg.reset_client())
+        return ok({"session_file_saved": True, "file": stored_path.name}, ".session 文件已导入")
     except Exception as e:
         return fail(e)
 
@@ -1084,15 +1189,18 @@ def api_login_start():
             "api_hash": data.get("api_hash") or current_cfg.get("api_hash"),
             "phone": data.get("phone") or current_cfg.get("phone"),
             "proxy": data.get("proxy", current_cfg.get("proxy", "")),
+            "session_type": data.get("session_type", current_cfg.get("session_type", "file")),
+            "string_session": data.get("string_session", current_cfg.get("string_session", "")),
+            "session_file": data.get("session_file", current_cfg.get("session_file", "telegram")),
             "download_threads": data.get("download_threads", current_cfg.get("download_threads", 16)),
             "cache_limit_mb": data.get("cache_limit_mb", current_cfg.get("cache_limit_mb", 1024)),
-        }, current_cfg)
+        }, current_cfg, require_string_session=False)
         api_id = data.get("api_id") or cfg.get("api_id")
         api_hash = data.get("api_hash") or cfg.get("api_hash")
         phone = data.get("phone") or cfg.get("phone")
         if not api_id or not api_hash or not phone:
             return fail("缺少 api_id / api_hash / phone", 400)
-        result = tg.run(tg.start_login(api_id, api_hash, phone, cfg.get("proxy", ""), cfg.get("download_threads", 16), cfg.get("cache_limit_mb", 1024)))
+        result = tg.run(tg.start_login(api_id, api_hash, phone, cfg.get("proxy", ""), cfg.get("session_type", "file"), cfg.get("session_file", ""), cfg.get("string_session", ""), cfg.get("download_threads", 16), cfg.get("cache_limit_mb", 1024)))
         return ok(result, result.get("message", "ok"))
     except Exception as e:
         return fail(e)

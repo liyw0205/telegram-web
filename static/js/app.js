@@ -90,6 +90,11 @@ async function loadLoginPage(){
     $("phone").value = cfg.phone || "";
     $("proxy").value = cfg.proxy || "";
     $("proxy").placeholder = cfg.proxy_redacted ? "已保存含凭据代理，留空沿用" : "socks5://127.0.0.1:7890";
+    $("session_type").value = cfg.session_type || "file";
+    $("session_file").value = "";
+    $("session_file").placeholder = cfg.session_file_saved ? "已保存，留空沿用当前 .session" : "telegram.session";
+    $("string_session").value = "";
+    $("string_session").placeholder = cfg.string_session_saved ? "已保存，留空沿用当前 StringSession" : "导入或登录后自动保存";
     $("download_threads").value = cfg.download_threads || 16;
     $("cache_limit_mb").value = cfg.cache_limit_mb || 1024;
     $("web_token").value = "";
@@ -102,12 +107,18 @@ function loginConfigPayload(includeWebToken = false){
   const apiHash = $("api_hash").value.trim();
   const phone = $("phone").value.trim();
   const proxy = $("proxy").value.trim();
+  const sessionType = $("session_type")?.value || "file";
+  const sessionFile = $("session_file")?.value.trim();
+  const stringSession = $("string_session")?.value.trim();
   const threads = $("download_threads").value.trim();
   const cacheLimit = $("cache_limit_mb").value.trim();
   if (apiId) payload.api_id = Number(apiId);
   if (apiHash) payload.api_hash = apiHash;
   if (phone) payload.phone = phone;
   if (proxy) payload.proxy = proxy;
+  if (sessionType) payload.session_type = sessionType;
+  if (sessionFile) payload.session_file = sessionFile;
+  if (stringSession) payload.string_session = stringSession;
   if (threads) payload.download_threads = Number(threads);
   if (cacheLimit) payload.cache_limit_mb = Number(cacheLimit);
   if (includeWebToken && $("web_token").value.trim()) payload.web_token = $("web_token").value.trim();
@@ -146,6 +157,41 @@ async function logoutTelegram(){
   if (!confirm("确认退出登录？")) return;
   try{ await api("/api/logout", { method:"POST", body:"{}" }); toast("已退出登录"); refreshStatus(); }
   catch(e){ toast(e.message); }
+}
+async function importStringSession(){
+  const value = $("string_session")?.value.trim();
+  if (!value) return toast("请先粘贴 StringSession");
+  try{
+    await api("/api/session/string", { method:"POST", body: JSON.stringify({ string_session: value }) });
+    $("string_session").value = "";
+    toast("StringSession 已导入");
+    loadLoginPage(); refreshStatus();
+  } catch(e){ toast(e.message); }
+}
+async function exportStringSession(){
+  try{
+    const data = await api("/api/session/string");
+    const value = data.string_session || "";
+    if (!value) return toast("当前没有 StringSession");
+    $("string_session").value = value;
+    if (navigator.clipboard) await navigator.clipboard.writeText(value).catch(() => {});
+    toast("StringSession 已填入文本框");
+  } catch(e){ toast(e.message); }
+}
+async function importSessionFile(){
+  const file = $("sessionFileInput")?.files?.[0];
+  if (!file) return toast("请选择 .session 文件");
+  const fd = new FormData();
+  fd.append("file", file);
+  try{
+    await api("/api/session/file", { method:"POST", body: fd });
+    $("sessionFileInput").value = "";
+    toast(".session 文件已导入");
+    loadLoginPage(); refreshStatus();
+  } catch(e){ toast(e.message); }
+}
+function exportSessionFile(){
+  window.open("/api/session/file", "_blank", "noopener");
 }
 
 /* 会话 */

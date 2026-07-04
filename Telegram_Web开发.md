@@ -102,6 +102,8 @@ data/uploads/
 | `POST /api/login/code` | 提交验证码 |
 | `POST /api/login/password` | 提交 2FA 密码 |
 | `POST /api/logout` | 退出登录 |
+| `GET/POST /api/session/string` | 导出或导入 StringSession |
+| `GET/POST /api/session/file` | 导出或导入 `.session` 文件 |
 | `GET /api/dialogs` | 获取会话列表 |
 | `GET /api/messages` | 获取消息列表，支持 `offset_id` 翻页 |
 | `POST /api/send` | 发送文本消息 |
@@ -442,3 +444,5 @@ rg -n "api\\(|fetch\\(|io\\(|/api/|socket|downloadMedia|prepareMedia|send" stati
 2026-07-04：Phase 3 强化媒体 Range 响应、任务终态保护、取消竞态处理、`.part` 临时下载和下载页任务操作反馈，测试扩展到 32 个。
 
 2026-07-04：Phase 4 优化下载页分页加载和任务/文件刷新节奏，增加内部错误通用响应与 `error_id`，小幅收紧移动端下载卡片和聊天输入布局，测试扩展到 36 个。
+
+2026-07-04：Phase 5 补充 StringSession 和 `.session` 文件导入导出，StringSession 登录成功后自动持久化，并完善 README 中部署、备份和恢复说明。

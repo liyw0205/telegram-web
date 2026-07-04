@@ -12,6 +12,13 @@
   <label>api_hash</label><input id="api_hash" placeholder="api_hash">
   <label>手机号</label><input id="phone" placeholder="+8613812345678">
   <label>SOCKS5 代理</label><input id="proxy" placeholder="socks5://127.0.0.1:7890">
+  <label>Session 类型</label>
+  <select id="session_type">
+    <option value="file">.session 文件</option>
+    <option value="string">StringSession</option>
+  </select>
+  <label>Session 文件名</label><input id="session_file" placeholder="telegram.session">
+  <label>StringSession</label><textarea id="string_session" placeholder="导入时粘贴 StringSession，留空则沿用已保存值"></textarea>
   <label>下载线程</label><input id="download_threads" type="number" min="1" max="128" value="16">
   <label>缓存上限(MB)</label><input id="cache_limit_mb" type="number" min="128" max="10240" value="1024">
   <label>Web Token</label><input id="web_token" type="password" autocomplete="new-password" placeholder="可选，保存后访问需要 Token">
@@ -22,6 +29,19 @@
     <button class="green" onclick="submitCode()">提交验证码</button>
     <button class="yellow" onclick="submitPassword()">提交 2FA</button>
     <button class="danger" onclick="logoutTelegram()">退出登录</button>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Session 迁移</h2>
+  <div class="action-grid">
+    <button class="gray" onclick="importStringSession()">导入 StringSession</button>
+    <button onclick="exportStringSession()">导出 StringSession</button>
+  </div>
+  <label>.session 文件</label><input id="sessionFileInput" type="file" accept=".session">
+  <div class="action-grid">
+    <button class="gray" onclick="importSessionFile()">导入 .session</button>
+    <button onclick="exportSessionFile()">导出 .session</button>
   </div>
 </section>
 {% endblock %}
