@@ -18,6 +18,50 @@ function apiFailure(error, status = 500, extra = {}) {
   return { status, body: { success: false, error, ...extra } };
 }
 
+const LOGIN_ELEMENT_IDS = [
+  "api_id",
+  "api_hash",
+  "phone",
+  "proxy",
+  "session_type",
+  "session_file",
+  "string_session",
+  "download_threads",
+  "cache_limit_mb",
+  "web_token",
+];
+
+const DOWNLOAD_ELEMENT_IDS = [
+  "downloadTaskList",
+  "downloadFileList",
+  "downloadFileStatus",
+];
+
+const CONFIRM_ELEMENT_IDS = [
+  "confirmMessage",
+  "confirmOk",
+  "confirmCancel",
+];
+
+const GALLERY_ELEMENT_IDS = [
+  "mediaViewer",
+  "viewerTitle",
+  "viewerIndex",
+  "viewerBody",
+  "viewerClose",
+  "viewerPrev",
+  "viewerNext",
+  "viewerDownload",
+  "galleryTrigger",
+];
+
+const DEFAULT_ELEMENT_IDS = [
+  ...LOGIN_ELEMENT_IDS,
+  ...DOWNLOAD_ELEMENT_IDS,
+  ...CONFIRM_ELEMENT_IDS,
+  ...GALLERY_ELEMENT_IDS,
+];
+
 function createClassList() {
   const values = new Set();
   return {
@@ -99,6 +143,22 @@ function expectHtmlIncludes(harness, id, fragments) {
   fragments.forEach((fragment) => assert(html.includes(fragment), `expected ${id} to include ${fragment}`));
 }
 
+function setFocused(harness, id) {
+  harness.context.document.activeElement = harness.elements.get(id);
+}
+
+function setOutsideFocus(harness) {
+  harness.context.document.activeElement = createElementState({ id: "outside" });
+}
+
+function expectFocused(harness, id) {
+  assert.strictEqual(harness.context.document.activeElement, harness.elements.get(id), `expected ${id} to be focused`);
+}
+
+function expectPreventedKeys(harness, keys) {
+  assert.deepStrictEqual(harness.calls.preventDefault, keys);
+}
+
 function clickElement(harness, id) {
   harness.elements.get(id).dispatchEvent({ type: "click" });
 }
@@ -116,33 +176,7 @@ function createHarness({ confirmResult = true, search = "", routes = {} } = {}) 
   const elements = new Map();
   const documentListeners = new Map();
   const calls = { confirm: [], fetch: [], open: [], clipboard: [], toast: [], preventDefault: [], focus: [] };
-  registerElements(elements, [
-    "api_id",
-    "api_hash",
-    "phone",
-    "proxy",
-    "session_type",
-    "session_file",
-    "string_session",
-    "download_threads",
-    "cache_limit_mb",
-    "web_token",
-    "downloadTaskList",
-    "downloadFileList",
-    "downloadFileStatus",
-    "confirmMessage",
-    "confirmOk",
-    "confirmCancel",
-    "mediaViewer",
-    "viewerTitle",
-    "viewerIndex",
-    "viewerBody",
-    "viewerClose",
-    "viewerPrev",
-    "viewerNext",
-    "viewerDownload",
-    "galleryTrigger",
-  ]);
+  registerElements(elements, DEFAULT_ELEMENT_IDS);
   elements.set("confirmOverlay", createElementState({ hidden: true }));
   elements.set("downloadFileMore", createElementState({ style: { display: "none" } }));
   elements.set("toast", createElementState({ appendChild(item) { calls.toast.push(item.textContent); } }));
@@ -225,7 +259,7 @@ async function testSensitiveConfirmCancelButtonResolvesFalse() {
   assert.strictEqual(harness.elements.get("confirmOverlay").hidden, false);
   assert(harness.elements.get("confirmOverlay").classList.contains("show"));
   assert.strictEqual(textOf(harness, "confirmMessage"), "确认取消测试");
-  assert.strictEqual(harness.context.document.activeElement, harness.elements.get("confirmCancel"));
+  expectFocused(harness, "confirmCancel");
   clickElement(harness, "confirmCancel");
   assert.strictEqual(await result, false);
   assert.strictEqual(harness.elements.get("confirmOverlay").hidden, true);
@@ -245,21 +279,19 @@ async function testSensitiveConfirmOkButtonResolvesTrue() {
 async function testSensitiveConfirmFocusTrapCyclesWithinDialog() {
   const harness = createHarness();
   const result = harness.context.confirmSensitive("焦点循环测试");
-  const cancel = harness.elements.get("confirmCancel");
-  const ok = harness.elements.get("confirmOk");
 
-  harness.context.document.activeElement = ok;
+  setFocused(harness, "confirmOk");
   pressDocumentKey(harness, "Tab");
-  assert.strictEqual(harness.context.document.activeElement, cancel);
+  expectFocused(harness, "confirmCancel");
 
   pressDocumentKey(harness, "Tab", { shiftKey: true });
-  assert.strictEqual(harness.context.document.activeElement, ok);
+  expectFocused(harness, "confirmOk");
 
-  harness.context.document.activeElement = createElementState({ id: "outside" });
+  setOutsideFocus(harness);
   pressDocumentKey(harness, "Tab");
-  assert.strictEqual(harness.context.document.activeElement, cancel);
+  expectFocused(harness, "confirmCancel");
 
-  assert.deepStrictEqual(harness.calls.preventDefault, ["Tab", "Shift+Tab", "Tab"]);
+  expectPreventedKeys(harness, ["Tab", "Shift+Tab", "Tab"]);
   clickElement(harness, "confirmCancel");
   assert.strictEqual(await result, false);
 }
@@ -270,7 +302,7 @@ async function testSensitiveConfirmEscapeCancels() {
   pressDocumentKey(harness, "Escape");
   assert.strictEqual(await result, false);
   assert.strictEqual(harness.elements.get("confirmOverlay").hidden, true);
-  assert.deepStrictEqual(harness.calls.preventDefault, ["Escape"]);
+  expectPreventedKeys(harness, ["Escape"]);
 }
 
 async function testSensitiveConfirmReentrantCancelsPrevious() {
@@ -285,8 +317,7 @@ async function testSensitiveConfirmReentrantCancelsPrevious() {
 
 async function testGalleryKeyboardNavigationAndFocusRestore() {
   const harness = createHarness();
-  const trigger = harness.elements.get("galleryTrigger");
-  harness.context.document.activeElement = trigger;
+  setFocused(harness, "galleryTrigger");
 
   harness.context.openGallery([
     { msgId: 1, url: "/media/one.jpg", mime: "image/jpeg", label: "第一张" },
@@ -294,7 +325,7 @@ async function testGalleryKeyboardNavigationAndFocusRestore() {
   ], 0);
 
   assert(harness.elements.get("mediaViewer").classList.contains("show"));
-  assert.strictEqual(harness.context.document.activeElement, harness.elements.get("viewerClose"));
+  expectFocused(harness, "viewerClose");
   assert.strictEqual(textOf(harness, "viewerTitle"), "第一张");
   assert.strictEqual(textOf(harness, "viewerIndex"), "1 / 2");
   expectHtmlIncludes(harness, "viewerBody", ["/media/one.jpg"]);
@@ -310,32 +341,30 @@ async function testGalleryKeyboardNavigationAndFocusRestore() {
 
   pressDocumentKey(harness, "Escape");
   assert(!harness.elements.get("mediaViewer").classList.contains("show"));
-  assert.strictEqual(harness.context.document.activeElement, trigger);
-  assert.deepStrictEqual(harness.calls.preventDefault, ["ArrowRight", "ArrowLeft", "Escape"]);
+  expectFocused(harness, "galleryTrigger");
+  expectPreventedKeys(harness, ["ArrowRight", "ArrowLeft", "Escape"]);
 }
 
 async function testGalleryFocusTrapCyclesWithinViewerControls() {
   const harness = createHarness();
-  const close = harness.elements.get("viewerClose");
-  const next = harness.elements.get("viewerNext");
 
   harness.context.bindGalleryEvents();
   harness.context.openGallery([
     { msgId: 1, url: "/media/one.jpg", mime: "image/jpeg", label: "第一张" },
   ], 0);
 
-  harness.context.document.activeElement = next;
+  setFocused(harness, "viewerNext");
   pressDocumentKey(harness, "Tab");
-  assert.strictEqual(harness.context.document.activeElement, close);
+  expectFocused(harness, "viewerClose");
 
   pressDocumentKey(harness, "Tab", { shiftKey: true });
-  assert.strictEqual(harness.context.document.activeElement, next);
+  expectFocused(harness, "viewerNext");
 
-  harness.context.document.activeElement = createElementState({ id: "outside" });
+  setOutsideFocus(harness);
   pressDocumentKey(harness, "Tab");
-  assert.strictEqual(harness.context.document.activeElement, close);
+  expectFocused(harness, "viewerClose");
 
-  assert.deepStrictEqual(harness.calls.preventDefault, ["Tab", "Shift+Tab", "Tab"]);
+  expectPreventedKeys(harness, ["Tab", "Shift+Tab", "Tab"]);
   clickElement(harness, "viewerClose");
   assert(!harness.elements.get("mediaViewer").classList.contains("show"));
 }
@@ -560,25 +589,69 @@ async function testDownloadFilesErrorShowsToastAfterExistingPage() {
   expectHtmlIncludes(harness, "downloadFileList", ["first.bin"]);
 }
 
+const TEST_GROUPS = [
+  {
+    name: "confirm dialog",
+    tests: [
+      testSensitiveConfirmCancelButtonResolvesFalse,
+      testSensitiveConfirmOkButtonResolvesTrue,
+      testSensitiveConfirmFocusTrapCyclesWithinDialog,
+      testSensitiveConfirmEscapeCancels,
+      testSensitiveConfirmReentrantCancelsPrevious,
+    ],
+  },
+  {
+    name: "gallery viewer",
+    tests: [
+      testGalleryKeyboardNavigationAndFocusRestore,
+      testGalleryFocusTrapCyclesWithinViewerControls,
+      testGalleryKeyboardIgnoresKeysWhileConfirmIsOpen,
+    ],
+  },
+  {
+    name: "api and login",
+    tests: [
+      testApiCopiesErrorIdAndKeepsMessageActionable,
+      testApiRedirectsUnauthorizedToAuthPage,
+      testLoadLoginPageUsesRedactedConfigPlaceholders,
+    ],
+  },
+  {
+    name: "session and task confirmations",
+    tests: [
+      testCancelingStringExportDoesNotRequestToken,
+      testStringExportRequestsOneTimeToken,
+      testFileExportOpensTokenizedDownloadUrl,
+      testTaskDeleteConfirmationControlsRequest,
+    ],
+  },
+  {
+    name: "downloads",
+    tests: [
+      testDownloadTasksRenderControlsAndErrors,
+      testDownloadFilesPaginationAndRendering,
+      testDownloadFilesErrorShowsToastAfterExistingPage,
+    ],
+  },
+];
+
+async function runTestGroups(groups) {
+  for (const group of groups) {
+    for (const test of group.tests) {
+      try {
+        await test();
+      } catch (err) {
+        if (err && typeof err === "object") {
+          err.message = `${group.name} / ${test.name}: ${err.message}`;
+        }
+        throw err;
+      }
+    }
+  }
+}
+
 async function main() {
-  await testSensitiveConfirmCancelButtonResolvesFalse();
-  await testSensitiveConfirmOkButtonResolvesTrue();
-  await testSensitiveConfirmFocusTrapCyclesWithinDialog();
-  await testSensitiveConfirmEscapeCancels();
-  await testSensitiveConfirmReentrantCancelsPrevious();
-  await testGalleryKeyboardNavigationAndFocusRestore();
-  await testGalleryFocusTrapCyclesWithinViewerControls();
-  await testGalleryKeyboardIgnoresKeysWhileConfirmIsOpen();
-  await testApiCopiesErrorIdAndKeepsMessageActionable();
-  await testApiRedirectsUnauthorizedToAuthPage();
-  await testLoadLoginPageUsesRedactedConfigPlaceholders();
-  await testCancelingStringExportDoesNotRequestToken();
-  await testStringExportRequestsOneTimeToken();
-  await testFileExportOpensTokenizedDownloadUrl();
-  await testTaskDeleteConfirmationControlsRequest();
-  await testDownloadTasksRenderControlsAndErrors();
-  await testDownloadFilesPaginationAndRendering();
-  await testDownloadFilesErrorShowsToastAfterExistingPage();
+  await runTestGroups(TEST_GROUPS);
   console.log("frontend smoke passed");
 }
 

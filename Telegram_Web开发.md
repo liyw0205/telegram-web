@@ -47,7 +47,7 @@
 | `templates/downloads.html` | 下载任务和已下载文件页面 |
 | `static/js/app.js` | 前端 API 封装、Socket.IO、会话/消息/媒体/下载交互 |
 | `static/css/app.css` | 全站样式和移动端布局 |
-| `tests/frontend_smoke.js` | 纯 Node 前端行为 smoke，mock 浏览器环境验证自定义敏感确认、键盘焦点循环、媒体查看器键盘交互和焦点循环、导出令牌、API 错误、登录页配置和下载页状态 |
+| `tests/frontend_smoke.js` | 纯 Node 前端行为 smoke，按确认弹窗、媒体查看器、登录页/API、session/任务确认和下载页分组，在 mock 浏览器环境验证自定义敏感确认、键盘焦点循环、媒体查看器键盘交互和焦点循环、导出令牌、API 错误、登录页配置和下载页状态 |
 | `docs/progress/` | 每阶段开发进度文档 |
 | `docs/handoff/` | 每阶段会话交接文档，`LATEST.md` 指向/承载最新交接内容 |
 
@@ -475,3 +475,5 @@ rg -n "api\\(|fetch\\(|io\\(|/api/|socket|downloadMedia|prepareMedia|send" stati
 2026-07-05：Phase 13 为媒体查看器增加打开前焦点记录、关闭后焦点恢复、Esc 关闭和左右方向键切换，并补充纯 Node smoke 覆盖。
 
 2026-07-05：Phase 14 为媒体查看器增加最小 focus trap，覆盖关闭、下载、上一项、下一项按钮的 Tab / Shift+Tab 循环；点击遮罩关闭暂不引入，避免移动端误触行为变化。
+
+2026-07-05：Phase 15 重组纯 Node 前端 smoke，抽出元素 ID、焦点和键盘断言 helper，并按确认弹窗、媒体查看器、登录/API、session/任务确认和下载页分组执行，保持无前端测试依赖。
