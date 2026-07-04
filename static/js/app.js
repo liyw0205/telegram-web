@@ -283,13 +283,13 @@ async function loadLoginPage(){
     $("proxy").placeholder = cfg.proxy_redacted ? "已保存含凭据代理，留空沿用" : "socks5://127.0.0.1:7890";
     $("session_type").value = cfg.session_type || "file";
     $("session_file").value = "";
-    $("session_file").placeholder = cfg.session_file_saved ? "已保存，留空沿用当前 .session" : "telegram.session";
+    $("session_file").placeholder = cfg.session_file_saved ? "已保存，留空沿用当前 .session 文件" : "telegram.session";
     $("string_session").value = "";
     $("string_session").placeholder = cfg.string_session_saved ? "已保存，留空沿用当前 StringSession" : "导入或登录后自动保存";
     $("download_threads").value = cfg.download_threads || 16;
     $("cache_limit_mb").value = cfg.cache_limit_mb || 1024;
     $("web_token").value = "";
-    $("web_token").placeholder = cfg.web_token_saved ? "已保存，留空不修改 Web Token" : "可选，保存后访问需要 Token";
+    $("web_token").placeholder = cfg.web_token_saved ? "已保存，留空不修改 Web Token" : "可选，8-256 字符，不能含空白";
   } catch(e){ toast(e.message); }
 }
 function loginConfigPayload(includeWebToken = false){

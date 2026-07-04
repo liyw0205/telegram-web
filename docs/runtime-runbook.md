@@ -88,6 +88,25 @@ curl -H "X-Web-Telegram-Token: $TELEGRAM_WEB_TOKEN" http://127.0.0.1:5000/api/st
 
 不要把带真实 Token 的完整 URL、Cookie 或命令历史提交到仓库。
 
+## 登录和 Session 操作
+
+登录页保存配置时，已保存的敏感字段会显示脱敏占位符。留空规则：
+
+- `api_hash` 留空：沿用已保存的 `api_hash`。
+- 含凭据代理留空：沿用已保存的代理。
+- Session 文件名留空：沿用已保存的 `.session` 文件。
+- StringSession 留空：沿用已保存的 StringSession。
+- Web Token 留空：不修改已保存的 Web Token。
+
+Session 文件名只接受 `data/` 目录内的文件名，可填写 `telegram` 或 `telegram.session`；系统保存配置时会去掉 `.session` 后缀，实际存储文件仍为对应的 `data/*.session`。
+
+Session 迁移操作：
+
+- 导入 StringSession 或 `.session` 文件前会弹出确认；确认后当前客户端会重置并切换到导入的会话。
+- 导出 StringSession 前会弹出确认；成功后文本会填入登录页 StringSession 文本框，并尝试复制到剪贴板。
+- 导出 `.session` 文件前会弹出确认；确认后会创建一次性导出令牌并打开下载链接。
+- 一次性导出令牌有效期为 60 秒，且使用后立即失效。
+
 ## 脱敏诊断接口
 
 浏览器可打开只读诊断页：

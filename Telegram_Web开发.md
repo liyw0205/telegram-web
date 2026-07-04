@@ -512,3 +512,5 @@ rg -n "api\\(|fetch\\(|io\\(|/api/|socket|downloadMedia|prepareMedia|send" stati
 2026-07-05：Phase 28 同步 README 和运行 runbook 的验证入口，补齐诊断脚本、可选 `/api/diagnostics` 探测、手动浏览器 smoke 入口、Web Token 和 `data/config.json` 边界说明；未改运行逻辑或脚本行为。
 
 2026-07-05：Phase 29 对齐 README 和运行 runbook 的启动、对外监听、Web Token 来源优先级、备份与恢复说明，新增 runbook 备份恢复章节；未改运行逻辑、测试或脚本行为。
+
+2026-07-05：Phase 30 对齐登录页与文档中的 StringSession、`.session`、Web Token、导入导出和 60 秒一次性令牌文案，补充登录页辅助说明与测试断言；未改登录、session 或鉴权行为。

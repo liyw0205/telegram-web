@@ -128,6 +128,10 @@ TELEGRAM_WEB_HOST=0.0.0.0 TELEGRAM_WEB_PORT=5000 TELEGRAM_WEB_TOKEN=your-strong-
 - 终态下载/预览任务会记录到 `data/task-history.json`，重启后可继续在下载页看到最近历史
 - `data/`、`Download/`、`Pictures/` 和 `.session` 文件是本地运行数据，不要提交到 Git
 - 当前登录页开放手机号登录、验证码、2FA、StringSession 导入导出和 `.session` 文件导入导出
+- 敏感配置字段已保存时会显示脱敏占位符；`api_hash`、含凭据代理、StringSession、`.session` 文件名和 Web Token 留空会沿用已保存值
+- Session 文件名只接受 `data/` 目录内文件名，可填写 `telegram` 或 `telegram.session`，实际存储文件会使用 `.session` 后缀
+- StringSession 导出会先弹出确认，成功后填入登录页文本框并尝试复制到剪贴板
+- `.session` 文件导入会重置当前客户端并切换到导入会话；导出会打开一次性令牌下载链接
 - Session 导出前会弹出确认，并使用 60 秒一次性导出令牌；令牌使用后立即失效
 - 对外开放前必须设置强 Web Token，并只在可信网络中使用
 

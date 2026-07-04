@@ -539,7 +539,7 @@ async function testLoadLoginPageUsesRedactedConfigPlaceholders() {
   assert.strictEqual(harness.elements.get("api_hash").placeholder, "已保存，留空沿用当前 api_hash");
   assert.strictEqual(harness.elements.get("proxy").placeholder, "已保存含凭据代理，留空沿用");
   assert.strictEqual(harness.elements.get("session_file").value, "");
-  assert.strictEqual(harness.elements.get("session_file").placeholder, "已保存，留空沿用当前 .session");
+  assert.strictEqual(harness.elements.get("session_file").placeholder, "已保存，留空沿用当前 .session 文件");
   assert.strictEqual(harness.elements.get("string_session").value, "");
   assert.strictEqual(harness.elements.get("string_session").placeholder, "已保存，留空沿用当前 StringSession");
   assert.strictEqual(harness.elements.get("web_token").value, "");

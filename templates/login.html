@@ -20,13 +20,13 @@
     <option value="string">StringSession</option>
   </select>
   <label for="session_file">Session 文件名</label><input id="session_file" autocomplete="off" aria-describedby="sessionFileHelp" placeholder="telegram.session">
-  <p id="sessionFileHelp" class="sr-only">已保存时留空会沿用当前 .session。</p>
+  <p id="sessionFileHelp" class="sr-only">只填写 data 目录内文件名，可带或不带 .session 后缀；已保存时留空会沿用当前 .session 文件。</p>
   <label for="string_session">StringSession</label><textarea id="string_session" autocomplete="off" spellcheck="false" aria-describedby="stringSessionHelp" placeholder="导入时粘贴 StringSession，留空则沿用已保存值"></textarea>
   <p id="stringSessionHelp" class="sr-only">已保存时留空会沿用当前 StringSession。</p>
   <label for="download_threads">下载线程</label><input id="download_threads" type="number" min="1" max="128" value="16">
   <label for="cache_limit_mb">缓存上限(MB)</label><input id="cache_limit_mb" type="number" min="128" max="10240" value="1024">
   <label for="web_token">Web Token</label><input id="web_token" type="password" autocomplete="new-password" aria-describedby="webTokenHelp" placeholder="可选，保存后访问需要 Token">
-  <p id="webTokenHelp" class="sr-only">已保存时留空不会修改 Web Token。</p>
+  <p id="webTokenHelp" class="sr-only">长度 8 到 256 字符，不能包含空白；已保存时留空不会修改 Web Token。</p>
 
   <div class="action-grid" role="group" aria-label="登录操作">
     <button type="button" class="gray" onclick="saveLoginConfig()">保存配置</button>
@@ -44,7 +44,7 @@
     <button type="button" onclick="exportStringSession()">导出 StringSession</button>
   </div>
   <label for="sessionFileInput">.session 文件</label><input id="sessionFileInput" type="file" accept=".session" aria-describedby="sessionUploadHelp">
-  <p id="sessionUploadHelp" class="sr-only">选择需要导入的 .session 文件。</p>
+  <p id="sessionUploadHelp" class="sr-only">选择需要导入的 .session 文件；导入后当前客户端会重置并切换到该会话。</p>
   <div class="action-grid" role="group" aria-label=".session 文件操作">
     <button type="button" class="gray" onclick="importSessionFile()">导入 .session</button>
     <button type="button" onclick="exportSessionFile()">导出 .session</button>
