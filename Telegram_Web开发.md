@@ -463,3 +463,5 @@ rg -n "api\\(|fetch\\(|io\\(|/api/|socket|downloadMedia|prepareMedia|send" stati
 2026-07-05：Phase 7 为 StringSession 和 `.session` 导出增加 60 秒一次性导出令牌，统一退出登录、导入/导出 session、取消/移除任务的前端确认语义，并补充错误 ID 日志检索说明。
 
 2026-07-05：Phase 8 增加纯 Node 前端行为 smoke 测试，不引入 Playwright/npm 依赖，覆盖确认取消不发请求、确认后申请一次性导出令牌、文件导出 URL 和任务删除确认。
+
+2026-07-05：Phase 9 扩展前端 smoke 覆盖下载任务渲染、任务接口错误、下载文件分页、分页按钮状态和下一页错误 toast，继续保持无前端构建链。

@@ -10,13 +10,30 @@ function response(data, status = 200) {
   };
 }
 
-function createHarness({ confirmResult = true, search = "" } = {}) {
+function createElementState(initial = {}) {
+  return {
+    value: "",
+    placeholder: "",
+    innerHTML: "",
+    textContent: "",
+    style: {},
+    disabled: false,
+    appended: [],
+    appendChild(item) { this.appended.push(item); },
+    insertAdjacentHTML(_position, html) { this.innerHTML += html; },
+    ...initial,
+  };
+}
+
+function createHarness({ confirmResult = true, search = "", routes = {} } = {}) {
   const elements = new Map();
   const calls = { confirm: [], fetch: [], open: [], clipboard: [], toast: [] };
-  elements.set("string_session", { value: "", placeholder: "" });
-  elements.set("toast", {
-    appendChild(item) { calls.toast.push(item.textContent); },
-  });
+  elements.set("string_session", createElementState());
+  elements.set("downloadTaskList", createElementState());
+  elements.set("downloadFileList", createElementState());
+  elements.set("downloadFileStatus", createElementState());
+  elements.set("downloadFileMore", createElementState({ style: { display: "none" } }));
+  elements.set("toast", createElementState({ appendChild(item) { calls.toast.push(item.textContent); } }));
 
   const context = {
     console,
@@ -43,6 +60,14 @@ function createHarness({ confirmResult = true, search = "" } = {}) {
     io() { return { on() {} }; },
     fetch: async (path, options = {}) => {
       calls.fetch.push({ path, options });
+      for (const [prefix, value] of Object.entries(routes)) {
+        if (String(path).startsWith(prefix)) {
+          if (value instanceof Error) {
+            return response({ success: false, error: value.message }, 500);
+          }
+          return response({ success: true, data: typeof value === "function" ? value(path, options) : value });
+        }
+      }
       if (path === "/api/session/export-token") {
         const body = JSON.parse(options.body || "{}");
         return response({ success: true, data: { export_token: `${body.kind}-token` } });
@@ -106,11 +131,102 @@ async function testTaskDeleteConfirmationControlsRequest() {
   assert.strictEqual(harness.calls.fetch[0].options.method, "DELETE");
 }
 
+async function testDownloadTasksRenderControlsAndErrors() {
+  const harness = createHarness({
+    routes: {
+      "/api/tasks": [
+        { id: "run-1", kind: "download_media", status: "running", progress: 25, downloaded_text: "1 MB", total_text: "4 MB", speed_text: "2 KB/s" },
+        { id: "done-1", kind: "prepare_media", status: "done", progress: 100, downloaded_text: "2 MB", total_text: "2 MB", speed_text: "0 B/s" },
+      ],
+    },
+  });
+  await harness.context.loadDownloadTasks();
+  const html = harness.elements.get("downloadTaskList").innerHTML;
+  assert(html.includes("download_media · running"));
+  assert(html.includes("taskPause('run-1')"));
+  assert(html.includes("取消"));
+  assert(html.includes("prepare_media · done"));
+  assert(html.includes("移除记录"));
+
+  const failing = createHarness({ routes: { "/api/tasks": new Error("任务接口失败") } });
+  await failing.context.loadDownloadTasks();
+  assert(failing.elements.get("downloadTaskList").innerHTML.includes("任务接口失败"));
+}
+
+async function testDownloadFilesPaginationAndRendering() {
+  const harness = createHarness({
+    routes: {
+      "/api/download-files": (path) => {
+        assert(path.includes("limit=30"));
+        if (path.includes("offset=0")) {
+          return {
+            items: [
+              { name: "photo.jpg", kind: "picture", url: "/pictures/photo.jpg", size_text: "10 KB", is_image: true },
+              { name: "clip.mp4", kind: "download", url: "/download-file/clip.mp4", size: 2048, is_video: true },
+            ],
+            total: 3,
+            has_more: true,
+          };
+        }
+        return {
+          items: [{ name: "doc.txt", kind: "download", url: "/download-file/doc.txt", size: 12 }],
+          total: 3,
+          has_more: false,
+        };
+      },
+    },
+  });
+
+  await harness.context.loadDownloadFiles(true);
+  assert.strictEqual(harness.calls.fetch[0].path, "/api/download-files?limit=30&offset=0");
+  assert(harness.elements.get("downloadFileList").innerHTML.includes("photo.jpg"));
+  assert(harness.elements.get("downloadFileList").innerHTML.includes("clip.mp4"));
+  assert.strictEqual(harness.elements.get("downloadFileStatus").textContent, "已显示 2 / 3");
+  assert.strictEqual(harness.elements.get("downloadFileMore").style.display, "inline-flex");
+
+  await harness.context.loadDownloadFiles(false);
+  assert.strictEqual(harness.calls.fetch[1].path, "/api/download-files?limit=30&offset=2");
+  assert(harness.elements.get("downloadFileList").innerHTML.includes("doc.txt"));
+  assert.strictEqual(harness.elements.get("downloadFileStatus").textContent, "已显示 3 / 3");
+  assert.strictEqual(harness.elements.get("downloadFileMore").style.display, "none");
+}
+
+async function testDownloadFilesErrorShowsToastAfterExistingPage() {
+  const harness = createHarness({
+    routes: {
+      "/api/download-files": (path) => {
+        if (path.includes("offset=0")) {
+          return { items: [{ name: "first.bin", kind: "download", url: "/download-file/first.bin", size: 1 }], total: 2, has_more: true };
+        }
+        throw new Error("下一页失败");
+      },
+    },
+  });
+  harness.context.fetch = async (path, options = {}) => {
+    harness.calls.fetch.push({ path, options });
+    if (String(path).startsWith("/api/download-files") && String(path).includes("offset=0")) {
+      return response({ success: true, data: { items: [{ name: "first.bin", kind: "download", url: "/download-file/first.bin", size: 1 }], total: 2, has_more: true } });
+    }
+    if (String(path).startsWith("/api/download-files")) {
+      return response({ success: false, error: "下一页失败" }, 500);
+    }
+    return response({ success: true, data: [] });
+  };
+
+  await harness.context.loadDownloadFiles(true);
+  await harness.context.loadDownloadFiles(false);
+  assert(harness.calls.toast.includes("下一页失败"));
+  assert(harness.elements.get("downloadFileList").innerHTML.includes("first.bin"));
+}
+
 async function main() {
   await testCancelingStringExportDoesNotRequestToken();
   await testStringExportRequestsOneTimeToken();
   await testFileExportOpensTokenizedDownloadUrl();
   await testTaskDeleteConfirmationControlsRequest();
+  await testDownloadTasksRenderControlsAndErrors();
+  await testDownloadFilesPaginationAndRendering();
+  await testDownloadFilesErrorShowsToastAfterExistingPage();
   console.log("frontend smoke passed");
 }
 
