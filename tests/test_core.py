@@ -303,7 +303,7 @@ class FlaskBoundaryTest(unittest.TestCase):
         self.assertFalse(response.get_json()["success"])
 
     def test_page_routes_render_without_telegram_login(self):
-        for path in ("/login", "/chats", "/chat/test-peer", "/downloads"):
+        for path in ("/login", "/chats", "/chat/test-peer", "/downloads", "/diagnostics"):
             response = self.client.get(path)
             self.addCleanup(response.close)
             self.assertEqual(response.status_code, 200, path)
@@ -585,6 +585,10 @@ class WebAuthTest(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
 
             response = self.client.get("/chats")
+            self.assertEqual(response.status_code, 302)
+            self.assertTrue(response.headers["Location"].startswith("/auth?"))
+
+            response = self.client.get("/diagnostics")
             self.assertEqual(response.status_code, 302)
             self.assertTrue(response.headers["Location"].startswith("/auth?"))
 

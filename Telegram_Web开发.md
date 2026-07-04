@@ -45,9 +45,10 @@
 | `templates/chats.html` | 会话列表页面 |
 | `templates/chat.html` | 单会话聊天页面、消息流和输入区容器 |
 | `templates/downloads.html` | 下载任务和已下载文件页面 |
+| `templates/diagnostics.html` | 只读脱敏诊断页面 |
 | `static/js/app.js` | 前端 API 封装、Socket.IO、会话/消息/媒体/下载交互 |
 | `static/css/app.css` | 全站样式和移动端布局 |
-| `tests/frontend_smoke.js` | 纯 Node 前端行为 smoke，按确认弹窗、媒体查看器、登录页/API、session/任务确认和下载页分组，在 mock 浏览器环境验证自定义敏感确认、键盘焦点循环、媒体查看器键盘交互和焦点循环、导出令牌、API 错误、登录页配置和下载页状态 |
+| `tests/frontend_smoke.js` | 纯 Node 前端行为 smoke，按确认弹窗、媒体查看器、登录页/API、session/任务确认、下载页和诊断页分组，在 mock 浏览器环境验证自定义敏感确认、键盘焦点循环、媒体查看器键盘交互和焦点循环、导出令牌、API 错误、登录页配置、下载页状态和诊断页脱敏渲染 |
 | `docs/browser-smoke.md` | 真实浏览器手动 smoke 验证清单和后续 Playwright 引入边界 |
 | `scripts/check-browser-smoke-env.sh` | 检查当前 shell 是否具备浏览器自动化 smoke 条件，不安装依赖 |
 | `docs/runtime-runbook.md` | 启动、访问、日志观察、Web Token 和常见故障排查清单 |
@@ -97,6 +98,7 @@ data/uploads/
 | `GET /chats` | 会话列表 |
 | `GET /chat/<peer>` | 单会话消息页面 |
 | `GET /downloads` | 下载任务和已下载文件 |
+| `GET /diagnostics` | 只读脱敏运行诊断页面 |
 
 ### API 入口
 
@@ -488,3 +490,5 @@ rg -n "api\\(|fetch\\(|io\\(|/api/|socket|downloadMedia|prepareMedia|send" stati
 2026-07-05：Phase 17 补充运行诊断脚本和运行排障 runbook，覆盖启动环境、Web Token、日志、常见故障和服务化边界；不新增守护进程依赖。
 
 2026-07-05：Phase 18 新增 `/api/diagnostics` 脱敏诊断状态接口，并让运行诊断脚本支持可选 HTTP 探测；测试扩展到 50 个，覆盖诊断输出不泄露 secret。
+
+2026-07-05：Phase 19 新增 `/diagnostics` 只读诊断页面和底部导航入口，前端只按白名单渲染布尔、枚举和数值状态，并补充纯 Node smoke 覆盖诊断页脱敏渲染和错误状态。

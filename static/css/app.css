@@ -19,7 +19,7 @@ h1,h2,h3,p{margin-top:0}.hint{color:var(--muted);font-size:13px;line-height:1.6}
 .back-btn{font-size:28px;line-height:1;background:#e2e8f0;color:#0f172a}
 .page{max-width:980px;margin:0 auto;padding:10px}
 
-.bottom-nav{position:fixed;left:0;right:0;bottom:0;height:66px;background:rgba(255,255,255,.96);backdrop-filter:blur(16px);border-top:1px solid var(--border);z-index:30;display:grid;grid-template-columns:repeat(3,1fr)}
+.bottom-nav{position:fixed;left:0;right:0;bottom:0;height:66px;background:rgba(255,255,255,.96);backdrop-filter:blur(16px);border-top:1px solid var(--border);z-index:30;display:grid;grid-template-columns:repeat(4,1fr)}
 .bottom-nav a{display:grid;place-items:center;align-content:center;gap:2px;color:var(--muted);text-decoration:none;font-size:12px;font-weight:800}
 .bottom-nav a span{font-size:20px}.bottom-nav a.active{color:var(--primary)}
 
@@ -94,6 +94,14 @@ h1,h2,h3,p{margin-top:0}.hint{color:var(--muted);font-size:13px;line-height:1.6}
 .progress-line{height:8px;background:rgba(100,116,139,.22);border-radius:999px;overflow:hidden}
 .progress-line div{height:100%;width:0;background:#22c55e}
 .empty{color:var(--muted);text-align:center;padding:28px}
+.diagnostics-summary{margin:12px 0;padding:12px;border:1px solid var(--border);border-radius:18px;background:#f8fafc;color:#334155;font-weight:800;line-height:1.5}
+.diagnostics-list{display:grid;border:1px solid var(--border);border-radius:18px;overflow:hidden;background:#fff}
+.diagnostics-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 12px;border-top:1px solid var(--border)}
+.diagnostics-row:first-child{border-top:0}
+.diagnostics-label{color:#334155;font-weight:800}
+.diagnostics-value{color:var(--muted);font-size:13px;text-align:right;word-break:break-word}
+.diagnostics-value.ok{color:var(--green);font-weight:900}
+.diagnostics-value.warn{color:var(--yellow);font-weight:900}
 
 @media (max-width:640px){
   body{padding-bottom:76px}
@@ -109,6 +117,8 @@ h1,h2,h3,p{margin-top:0}.hint{color:var(--muted);font-size:13px;line-height:1.6}
   .download-card .small-btn{grid-column:2;justify-self:start;padding:7px 12px}
   .task-head{align-items:flex-start}
   .section-head{align-items:center}
+  .diagnostics-row{grid-template-columns:minmax(0,1fr);gap:4px}
+  .diagnostics-value{text-align:left}
 }
 
 #toast{position:fixed;left:50%;bottom:82px;transform:translateX(-50%);z-index:100;display:grid;gap:8px;width:min(440px,calc(100vw - 32px));pointer-events:none}

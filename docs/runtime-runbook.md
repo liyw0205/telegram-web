@@ -83,6 +83,14 @@ curl -H "X-Web-Telegram-Token: $TELEGRAM_WEB_TOKEN" http://127.0.0.1:5000/api/st
 
 ## 脱敏诊断接口
 
+浏览器可打开只读诊断页：
+
+```text
+http://127.0.0.1:5000/diagnostics
+```
+
+该页面复用 `/api/diagnostics`，只渲染白名单布尔、枚举和数值状态，不展示 secret、Token、代理原文、手机号、StringSession、`.session` 路径或本地绝对路径。启用 Web Token 时，页面和接口一样会先经过 `/auth`。
+
 运行中可访问：
 
 ```sh

@@ -1277,6 +1277,8 @@ def page_chats(): return render_template("chats.html", active="chats")
 def page_chat(peer): return render_template("chat.html", active="chats", peer=unquote(peer))
 @app.route("/downloads")
 def page_downloads(): return render_template("downloads.html", active="downloads")
+@app.route("/diagnostics")
+def page_diagnostics(): return render_template("diagnostics.html", active="diagnostics")
 
 @app.route("/api/config", methods=["GET", "POST"])
 def api_config():

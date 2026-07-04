@@ -11,6 +11,7 @@
 - 下载任务管理（暂停 / 删除）
 - StringSession / `.session` 导入导出（导出需一次性令牌）
 - 敏感操作自定义确认弹窗（含键盘焦点循环）
+- 只读脱敏诊断页面和诊断 API
 - 缓存自动清理
 - Markdown 消息渲染
 
@@ -39,13 +40,13 @@ node tests/frontend_smoke.js
 git diff --check
 ```
 
-`tests/frontend_smoke.js` 使用纯 Node mock 浏览器环境，按确认弹窗、媒体查看器、登录页/API、session/任务确认和下载页分组覆盖前端自定义敏感确认弹窗、键盘焦点循环、媒体查看器键盘交互、焦点恢复和焦点循环、一次性 session 导出令牌请求链、API 错误 ID 复制、401 跳转、登录页脱敏配置占位符、任务删除确认、下载任务渲染、下载文件分页和错误提示，不需要真实 Telegram 登录或浏览器。
+`tests/frontend_smoke.js` 使用纯 Node mock 浏览器环境，按确认弹窗、媒体查看器、登录页/API、session/任务确认、下载页和诊断页分组覆盖前端自定义敏感确认弹窗、键盘焦点循环、媒体查看器键盘交互、焦点恢复和焦点循环、一次性 session 导出令牌请求链、API 错误 ID 复制、401 跳转、登录页脱敏配置占位符、任务删除确认、下载任务渲染、下载文件分页、诊断页脱敏渲染和错误提示，不需要真实 Telegram 登录或浏览器。
 
 真实浏览器 smoke 目前作为可选手动验证：先运行 `sh scripts/check-browser-smoke-env.sh` 查看本机是否具备自动化条件，再按 `docs/browser-smoke.md` 执行页面和键盘交互清单。
 
 运行前可执行 `sh scripts/diagnose-runtime.sh` 做本机依赖、语法和启动环境预检；详细排障流程见 `docs/runtime-runbook.md`。
 
-服务启动后可访问 `GET /api/diagnostics` 查看脱敏运行状态。该接口只返回配置是否存在、secret 是否已保存、Token 来源、host/port 和运行目录状态，不返回 `api_hash`、StringSession、`.session` 内容、Web Token 或代理凭据。
+服务启动后可打开 `/diagnostics` 查看只读诊断页，也可访问 `GET /api/diagnostics` 查看脱敏运行状态。诊断页只渲染白名单布尔、枚举和数值状态；接口只返回配置是否存在、secret 是否已保存、Token 来源、host/port 和运行目录状态，不返回 `api_hash`、StringSession、`.session` 内容、Web Token 或代理凭据。
 
 ## 运行
 

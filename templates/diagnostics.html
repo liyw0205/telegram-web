@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="mobile-panel">
+  <div class="page-title-row">
+    <div><h1>诊断</h1><p>只读运行状态和脱敏配置检查</p></div>
+    <button class="round-btn" onclick="loadDiagnosticsPage()">↻</button>
+  </div>
+
+  <div id="diagnosticsSummary" class="diagnostics-summary">加载中...</div>
+
+  <h2 class="section-title">配置</h2>
+  <div id="diagnosticsConfig" class="diagnostics-list"></div>
+
+  <h2 class="section-title">访问</h2>
+  <div id="diagnosticsAuth" class="diagnostics-list"></div>
+
+  <h2 class="section-title">运行</h2>
+  <div id="diagnosticsRuntime" class="diagnostics-list"></div>
+
+  <h2 class="section-title">目录</h2>
+  <div id="diagnosticsPaths" class="diagnostics-list"></div>
+</section>
+{% endblock %}
+{% block scripts %}<script>loadDiagnosticsPage();</script>{% endblock %}

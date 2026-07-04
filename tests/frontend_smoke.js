@@ -37,6 +37,14 @@ const DOWNLOAD_ELEMENT_IDS = [
   "downloadFileStatus",
 ];
 
+const DIAGNOSTICS_ELEMENT_IDS = [
+  "diagnosticsSummary",
+  "diagnosticsConfig",
+  "diagnosticsAuth",
+  "diagnosticsRuntime",
+  "diagnosticsPaths",
+];
+
 const CONFIRM_ELEMENT_IDS = [
   "confirmMessage",
   "confirmOk",
@@ -58,6 +66,7 @@ const GALLERY_ELEMENT_IDS = [
 const DEFAULT_ELEMENT_IDS = [
   ...LOGIN_ELEMENT_IDS,
   ...DOWNLOAD_ELEMENT_IDS,
+  ...DIAGNOSTICS_ELEMENT_IDS,
   ...CONFIRM_ELEMENT_IDS,
   ...GALLERY_ELEMENT_IDS,
 ];
@@ -589,6 +598,100 @@ async function testDownloadFilesErrorShowsToastAfterExistingPage() {
   expectHtmlIncludes(harness, "downloadFileList", ["first.bin"]);
 }
 
+async function testDiagnosticsPageRendersRedactedStatusOnly() {
+  const harness = createHarness({
+    routes: {
+      "/api/diagnostics": {
+        config: {
+          exists: true,
+          api_id_configured: true,
+          api_hash_saved: true,
+          api_hash: "abcdefabcdefabcdefabcdefabcdefab",
+          phone_configured: true,
+          phone: "+8613800000000",
+          proxy_saved: true,
+          proxy_redacted: true,
+          proxy: "socks5://user-secret:pass-secret@127.0.0.1:1080",
+          session_type: "string",
+          session_file_saved: true,
+          session_file_exists: false,
+          session_file: "/private/account.session",
+          string_session_saved: true,
+          string_session: "string-session-secret",
+          download_threads: 16,
+          cache_limit_mb: 1024,
+        },
+        web_auth: {
+          enabled: true,
+          source: "environment",
+          env_token_set: true,
+          config_token_saved: false,
+          web_token: "web-token-secret",
+        },
+        runtime: {
+          host: "127.0.0.1",
+          port: 5000,
+          port_valid: true,
+          loopback: true,
+          external_bind_requires_token: false,
+        },
+        paths: {
+          data_dir_exists: true,
+          download_dir_exists: true,
+          pictures_dir_exists: true,
+          cache_dir_exists: true,
+          upload_dir_exists: true,
+          task_history_exists: false,
+        },
+      },
+    },
+  });
+
+  await harness.context.loadDiagnosticsPage();
+
+  assert.strictEqual(harness.calls.fetch[0].path, "/api/diagnostics");
+  assert.strictEqual(textOf(harness, "diagnosticsSummary"), "Web Token 已启用 · 环境变量 · 本机监听 · 5000");
+  expectHtmlIncludes(harness, "diagnosticsConfig", ["api_hash", "已保存，含凭据", "StringSession", "缓存上限(MB)", "1024"]);
+  expectHtmlIncludes(harness, "diagnosticsAuth", ["Web Token", "Token 来源", "环境变量"]);
+  expectHtmlIncludes(harness, "diagnosticsRuntime", ["监听范围", "本机", "Port", "5000"]);
+  expectHtmlIncludes(harness, "diagnosticsPaths", ["data", "Download", "Pictures"]);
+
+  const rendered = [
+    textOf(harness, "diagnosticsSummary"),
+    htmlOf(harness, "diagnosticsConfig"),
+    htmlOf(harness, "diagnosticsAuth"),
+    htmlOf(harness, "diagnosticsRuntime"),
+    htmlOf(harness, "diagnosticsPaths"),
+  ].join("\n");
+  [
+    "abcdefabcdefabcdefabcdefabcdefab",
+    "+8613800000000",
+    "user-secret",
+    "pass-secret",
+    "127.0.0.1",
+    "/private/account.session",
+    "string-session-secret",
+    "web-token-secret",
+  ].forEach((secret) => assert(!rendered.includes(secret), `diagnostics rendered secret ${secret}`));
+}
+
+async function testDiagnosticsPageShowsErrorSummaryAndToast() {
+  const harness = createHarness({
+    routes: {
+      "/api/diagnostics": apiFailure("诊断接口失败", 500),
+    },
+  });
+
+  await harness.context.loadDiagnosticsPage();
+
+  assert.strictEqual(textOf(harness, "diagnosticsSummary"), "诊断接口失败");
+  assert(harness.calls.toast.includes("诊断接口失败"));
+  assert.strictEqual(htmlOf(harness, "diagnosticsConfig"), "");
+  assert.strictEqual(htmlOf(harness, "diagnosticsAuth"), "");
+  assert.strictEqual(htmlOf(harness, "diagnosticsRuntime"), "");
+  assert.strictEqual(htmlOf(harness, "diagnosticsPaths"), "");
+}
+
 const TEST_GROUPS = [
   {
     name: "confirm dialog",
@@ -631,6 +734,13 @@ const TEST_GROUPS = [
       testDownloadTasksRenderControlsAndErrors,
       testDownloadFilesPaginationAndRendering,
       testDownloadFilesErrorShowsToastAfterExistingPage,
+    ],
+  },
+  {
+    name: "diagnostics",
+    tests: [
+      testDiagnosticsPageRendersRedactedStatusOnly,
+      testDiagnosticsPageShowsErrorSummaryAndToast,
     ],
   },
 ];

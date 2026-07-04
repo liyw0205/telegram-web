@@ -145,6 +145,66 @@ function formatSize(n){
   return i === 0 ? `${Math.round(n)} ${u[i]}` : `${n.toFixed(2)} ${u[i]}`;
 }
 
+function boolText(value){ return value ? "是" : "否"; }
+function authSourceText(value){ return value === "environment" ? "环境变量" : value === "config" ? "配置文件" : "未启用"; }
+function runtimeScopeText(runtime){ return runtime && runtime.loopback ? "本机监听" : "对外监听"; }
+function runtimePortText(runtime){ return runtime && runtime.port_valid ? String(runtime.port) : "无效"; }
+function renderDiagnosticsValue(value, isOk = null){
+  const text = typeof value === "boolean" ? boolText(value) : String(value ?? "-");
+  const cls = isOk === null ? "" : (isOk ? " ok" : " warn");
+  return `<span class="diagnostics-value${cls}">${escapeHtml(text)}</span>`;
+}
+function renderDiagnosticsRows(id, rows){
+  const box = $(id); if (!box) return;
+  box.innerHTML = rows.map(row => `<div class="diagnostics-row"><span class="diagnostics-label">${escapeHtml(row[0])}</span>${renderDiagnosticsValue(row[1], row[2])}</div>`).join("");
+}
+async function loadDiagnosticsPage(){
+  const summary = $("diagnosticsSummary");
+  try{
+    const d = await api("/api/diagnostics");
+    const cfg = d.config || {}, auth = d.web_auth || {}, runtime = d.runtime || {}, paths = d.paths || {};
+    if (summary) summary.textContent = `${auth.enabled ? "Web Token 已启用" : "Web Token 未启用"} · ${authSourceText(auth.source)} · ${runtimeScopeText(runtime)} · ${runtimePortText(runtime)}`;
+    renderDiagnosticsRows("diagnosticsConfig", [
+      ["配置文件", cfg.exists, cfg.exists],
+      ["api_id", cfg.api_id_configured, cfg.api_id_configured],
+      ["api_hash", cfg.api_hash_saved, cfg.api_hash_saved],
+      ["手机号", cfg.phone_configured, cfg.phone_configured],
+      ["代理", cfg.proxy_saved ? (cfg.proxy_redacted ? "已保存，含凭据" : "已保存") : "未保存", null],
+      ["Session 类型", cfg.session_type || "file", null],
+      [".session 已保存", cfg.session_file_saved, cfg.session_file_saved],
+      [".session 文件存在", cfg.session_file_exists, cfg.session_file_exists],
+      ["StringSession", cfg.string_session_saved, cfg.string_session_saved],
+      ["下载线程", cfg.download_threads ?? "-", null],
+      ["缓存上限(MB)", cfg.cache_limit_mb ?? "-", null],
+    ]);
+    renderDiagnosticsRows("diagnosticsAuth", [
+      ["Web Token", auth.enabled, auth.enabled],
+      ["Token 来源", authSourceText(auth.source), null],
+      ["环境变量 Token", auth.env_token_set, auth.env_token_set],
+      ["配置文件 Token", auth.config_token_saved, auth.config_token_saved],
+    ]);
+    renderDiagnosticsRows("diagnosticsRuntime", [
+      ["监听范围", runtime.loopback ? "本机" : "对外", runtime.loopback || auth.enabled],
+      ["Port", runtimePortText(runtime), runtime.port_valid],
+      ["对外监听需 Token", runtime.external_bind_requires_token, !runtime.external_bind_requires_token || auth.enabled],
+    ]);
+    renderDiagnosticsRows("diagnosticsPaths", [
+      ["data", paths.data_dir_exists, paths.data_dir_exists],
+      ["Download", paths.download_dir_exists, paths.download_dir_exists],
+      ["Pictures", paths.pictures_dir_exists, paths.pictures_dir_exists],
+      ["media-cache", paths.cache_dir_exists, paths.cache_dir_exists],
+      ["uploads", paths.upload_dir_exists, paths.upload_dir_exists],
+      ["task-history", paths.task_history_exists, null],
+    ]);
+  } catch(e){
+    if (summary) summary.textContent = e.message;
+    ["diagnosticsConfig", "diagnosticsAuth", "diagnosticsRuntime", "diagnosticsPaths"].forEach(id => {
+      const box = $(id); if (box) box.innerHTML = "";
+    });
+    toast(e.message);
+  }
+}
+
 function toggleFold(id){ $(id)?.classList.toggle("show"); }
 function toggleComposer(id){
   document.querySelectorAll(".composer-panel").forEach(el => {
