@@ -492,3 +492,5 @@ rg -n "api\\(|fetch\\(|io\\(|/api/|socket|downloadMedia|prepareMedia|send" stati
 2026-07-05：Phase 18 新增 `/api/diagnostics` 脱敏诊断状态接口，并让运行诊断脚本支持可选 HTTP 探测；测试扩展到 50 个，覆盖诊断输出不泄露 secret。
 
 2026-07-05：Phase 19 新增 `/diagnostics` 只读诊断页面和底部导航入口，前端只按白名单渲染布尔、枚举和数值状态，并补充纯 Node smoke 覆盖诊断页脱敏渲染和错误状态。
+
+2026-07-05：Phase 20 复核真实浏览器 smoke 条件仍不足以引入自动化浏览器测试，将 `/diagnostics` 加入手动浏览器 smoke 清单，并记录继续不引入 npm/Playwright 依赖的边界。

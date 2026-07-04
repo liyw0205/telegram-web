@@ -4,6 +4,8 @@
 
 Phase 16 在当前 Termux shell 中只确认到 Node/npm/npx 可用；仓库没有 `package.json`、Playwright 配置或浏览器 smoke 脚本，本机也没有可直接调用的 `chromium`、`chromium-browser`、`google-chrome`、`google-chrome-stable`、`firefox` 或 `playwright` 命令，Node 侧也未安装 `playwright` 模块。
 
+Phase 20 重新运行 `sh scripts/check-browser-smoke-env.sh` 后结论不变：Node/npm/npx 可用，Playwright Node 模块缺失，常见浏览器命令缺失。因此 `/diagnostics` 只加入手动浏览器 smoke 清单，不新增 npm、Playwright、Puppeteer、Selenium 或浏览器安装步骤。
+
 因此当前仍以纯 Node smoke 和后端单元测试作为必跑自动化基线；真实浏览器回归使用下面的手动清单，不在本阶段引入 Playwright、Puppeteer、Selenium 或 npm 构建链。
 
 ## 环境检查
@@ -43,7 +45,17 @@ http://127.0.0.1:5000/login
 
 - 打开 `/login`，页面标题、顶部状态、底部导航、手机号登录表单和 Session 迁移区域可见。
 - `api_hash`、`proxy`、`.session`、`StringSession`、`Web Token` 已保存时只显示脱敏占位符，不把真实值写入输入框。
-- 不登录 Telegram 的情况下，`/chats`、`/downloads` 可打开并显示可理解的空状态、未授权状态或错误提示，不出现前端白屏。
+- 不登录 Telegram 的情况下，`/chats`、`/downloads`、`/diagnostics` 可打开并显示可理解的空状态、未授权状态、诊断状态或错误提示，不出现前端白屏。
+
+诊断页：
+
+- 打开 `/diagnostics`，页面标题、刷新按钮、摘要区域和“配置 / 访问 / 运行 / 目录”四组列表可见。
+- 摘要区域只显示 Web Token 是否启用、Token 来源、监听范围和端口，不显示原始 host、URL、Token 或本地路径。
+- 配置列表只显示 `api_id`、`api_hash`、手机号、代理、`.session`、StringSession 等是否已配置或已保存，不显示真实 `api_hash`、手机号、代理原文、代理用户名/密码、StringSession、`.session` 路径或内容。
+- 访问列表只显示 Web Token 是否启用、来源以及环境变量/配置文件是否设置，不显示 Token 原文。
+- 运行和目录列表只显示端口、监听范围、是否需要 Token 和目录存在状态，不显示本地绝对路径。
+- 点击刷新按钮后列表可重新加载；接口失败时摘要区域显示错误，页面其他区域清空且不白屏。
+- 启用 Web Token 后直接访问 `/diagnostics` 会先跳转 `/auth`；验证成功后回到诊断页。
 
 确认弹窗：
 
@@ -69,8 +81,8 @@ http://127.0.0.1:5000/login
 
 移动端视口：
 
-- 用手机浏览器或开发者工具窄屏宽度查看 `/login`、`/chats`、`/chat/<peer>`、`/downloads`。
-- 顶部栏、底部导航、聊天输入区、下载任务卡片和确认弹窗不互相遮挡。
+- 用手机浏览器或开发者工具窄屏宽度查看 `/login`、`/chats`、`/chat/<peer>`、`/downloads`、`/diagnostics`。
+- 顶部栏、底部导航、聊天输入区、下载任务卡片、诊断列表和确认弹窗不互相遮挡。
 - 按钮文字不溢出，关键操作按钮可点击。
 
 ## 后续 Playwright 引入边界
