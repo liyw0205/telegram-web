@@ -31,6 +31,15 @@ pip install -r requirements.txt
 
 ## 验证
 
+推荐先做运行环境预检：
+
+```bash
+sh -n scripts/diagnose-runtime.sh
+sh scripts/diagnose-runtime.sh
+```
+
+再运行自动化回归：
+
 ```bash
 PYTHONPYCACHEPREFIX="${TMPDIR:-$HOME/.cache}/telegram-web-pycache" python -m py_compile app.py
 PYTHONPYCACHEPREFIX="${TMPDIR:-$HOME/.cache}/telegram-web-pycache" python -Wd -m unittest discover -v
@@ -40,11 +49,17 @@ node tests/frontend_smoke.js
 git diff --check
 ```
 
-`tests/frontend_smoke.js` 使用纯 Node mock 浏览器环境，按确认弹窗、媒体查看器、登录页/API、session/任务确认、下载页和诊断页分组覆盖前端自定义敏感确认弹窗、键盘焦点循环、媒体查看器键盘交互、焦点恢复和焦点循环、一次性 session 导出令牌请求链、API 错误 ID 复制、401 跳转、登录页脱敏配置占位符、任务删除确认、下载任务渲染、下载文件分页、诊断页脱敏渲染和错误提示，不需要真实 Telegram 登录或浏览器。
+`tests/frontend_smoke.js` 使用纯 Node mock 浏览器环境，按确认弹窗、媒体查看器、聊天消息、会话列表、登录页/API、session/任务确认、下载页和诊断页分组覆盖前端自定义敏感确认弹窗、键盘焦点循环、媒体查看器键盘交互、焦点恢复和焦点循环、聊天加载/发送状态、会话搜索和会话项语义、一次性 session 导出令牌请求链、API 错误 ID 复制、401 跳转、登录页脱敏配置占位符、任务删除确认、下载任务渲染、下载文件分页、诊断页脱敏渲染和错误提示，不需要真实 Telegram 登录或浏览器。
 
-真实浏览器 smoke 目前作为可选手动验证：先运行 `sh scripts/check-browser-smoke-env.sh` 查看本机是否具备自动化条件，再按 `docs/browser-smoke.md` 执行页面和键盘交互清单。
+真实浏览器 smoke 目前作为可选手动验证：先运行 `sh scripts/check-browser-smoke-env.sh` 查看本机是否具备自动化条件，再按 `docs/browser-smoke.md` 执行页面和键盘交互清单。该检查脚本只报告命令和 Node 模块可用性，不安装依赖，不读取运行数据。
 
-运行前可执行 `sh scripts/diagnose-runtime.sh` 做本机依赖、语法和启动环境预检；详细排障流程见 `docs/runtime-runbook.md`。
+服务启动后可用以下命令对脱敏诊断接口做可选 HTTP 探测：
+
+```bash
+TELEGRAM_WEB_DIAGNOSTICS_URL=http://127.0.0.1:5000/api/diagnostics sh scripts/diagnose-runtime.sh
+```
+
+诊断脚本只检查仓库文件、命令、依赖导入、语法、前端语法和启动环境变量形状，不读取 `data/config.json`，也不会打印 Web Token、StringSession、`.session`、代理凭据或 Telegram API 凭据。若 Web Token 只保存在 `data/config.json`，脚本不会读取该 Token，HTTP 探测可能提示鉴权失败或探测失败；详细排障流程见 `docs/runtime-runbook.md`。
 
 服务启动后可打开 `/diagnostics` 查看只读诊断页，也可访问 `GET /api/diagnostics` 查看脱敏运行状态。诊断页只渲染白名单布尔、枚举和数值状态；接口只返回配置是否存在、secret 是否已保存、Token 来源、host/port 和运行目录状态，不返回 `api_hash`、StringSession、`.session` 内容、Web Token 或代理凭据。
 

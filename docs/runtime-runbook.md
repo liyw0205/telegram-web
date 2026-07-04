@@ -4,6 +4,13 @@
 
 本文记录本项目在 Termux 或本机单进程形态下的启动、访问、日志观察和常见故障排查方式。当前仓库不内置 systemd unit、Termux service、容器编排或日志轮转配置；这些应由使用者在自己的运行环境中维护。
 
+## 验证入口总览
+
+- 自动化基线：运行 `py_compile`、后端 `unittest`、`node --check`、纯 Node 前端 smoke 和 `git diff --check`，命令见本文末尾“必跑回归”。
+- 运行预检：运行 `sh -n scripts/diagnose-runtime.sh` 和 `sh scripts/diagnose-runtime.sh`，检查仓库文件、命令、依赖导入、语法和启动环境变量形状。
+- 运行中探测：服务启动后可设置 `TELEGRAM_WEB_DIAGNOSTICS_URL=http://127.0.0.1:5000/api/diagnostics` 再运行诊断脚本，对脱敏诊断接口做可选 HTTP 探测。
+- 浏览器 smoke：先运行 `sh scripts/check-browser-smoke-env.sh` 记录本机自动化能力，再按 `docs/browser-smoke.md` 执行手动页面和键盘交互清单。
+
 ## 安全预检
 
 运行诊断脚本：
