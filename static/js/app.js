@@ -618,6 +618,10 @@ function bindGalleryEvents(){
   $("viewerNext")?.addEventListener("click", () => moveGallery(1));
   $("viewerDownload")?.addEventListener("click", () => { const cur = GALLERY_ITEMS[GALLERY_INDEX]; if (cur) downloadMedia(cur.msgId); });
 }
+function getGalleryFocusables(){
+  return [$("viewerClose"), $("viewerDownload"), $("viewerPrev"), $("viewerNext")]
+    .filter(el => el && !el.disabled && typeof el.focus === "function");
+}
 function handleGalleryKeydown(event){
   const viewer = $("mediaViewer");
   if (!viewer?.classList.contains("show") || pendingConfirm) return;
@@ -630,6 +634,21 @@ function handleGalleryKeydown(event){
   } else if (event.key === "ArrowRight") {
     event.preventDefault();
     moveGallery(1);
+  } else if (event.key === "Tab") {
+    const focusables = getGalleryFocusables();
+    if (!focusables.length) {
+      event.preventDefault();
+      return;
+    }
+    const first = focusables[0], last = focusables[focusables.length - 1];
+    const current = document.activeElement;
+    if (event.shiftKey && (current === first || !focusables.includes(current))) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && (current === last || !focusables.includes(current))) {
+      event.preventDefault();
+      first.focus();
+    }
   }
 }
 function openGallery(items, startIndex = 0){

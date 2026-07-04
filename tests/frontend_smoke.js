@@ -314,6 +314,32 @@ async function testGalleryKeyboardNavigationAndFocusRestore() {
   assert.deepStrictEqual(harness.calls.preventDefault, ["ArrowRight", "ArrowLeft", "Escape"]);
 }
 
+async function testGalleryFocusTrapCyclesWithinViewerControls() {
+  const harness = createHarness();
+  const close = harness.elements.get("viewerClose");
+  const next = harness.elements.get("viewerNext");
+
+  harness.context.bindGalleryEvents();
+  harness.context.openGallery([
+    { msgId: 1, url: "/media/one.jpg", mime: "image/jpeg", label: "第一张" },
+  ], 0);
+
+  harness.context.document.activeElement = next;
+  pressDocumentKey(harness, "Tab");
+  assert.strictEqual(harness.context.document.activeElement, close);
+
+  pressDocumentKey(harness, "Tab", { shiftKey: true });
+  assert.strictEqual(harness.context.document.activeElement, next);
+
+  harness.context.document.activeElement = createElementState({ id: "outside" });
+  pressDocumentKey(harness, "Tab");
+  assert.strictEqual(harness.context.document.activeElement, close);
+
+  assert.deepStrictEqual(harness.calls.preventDefault, ["Tab", "Shift+Tab", "Tab"]);
+  clickElement(harness, "viewerClose");
+  assert(!harness.elements.get("mediaViewer").classList.contains("show"));
+}
+
 async function testGalleryKeyboardIgnoresKeysWhileConfirmIsOpen() {
   const harness = createHarness();
   harness.context.openGallery([
@@ -541,6 +567,7 @@ async function main() {
   await testSensitiveConfirmEscapeCancels();
   await testSensitiveConfirmReentrantCancelsPrevious();
   await testGalleryKeyboardNavigationAndFocusRestore();
+  await testGalleryFocusTrapCyclesWithinViewerControls();
   await testGalleryKeyboardIgnoresKeysWhileConfirmIsOpen();
   await testApiCopiesErrorIdAndKeepsMessageActionable();
   await testApiRedirectsUnauthorizedToAuthPage();
