@@ -1,4 +1,7 @@
 let DIALOGS = [];
+let dialogsLoading = false;
+let dialogsCurrentPromise = null;
+let dialogsHasLoaded = false;
 let CURRENT_PEER = "";
 let OLDEST_MSG_ID = 0;
 let messagesLoading = false;
@@ -444,15 +447,35 @@ async function exportSessionFile(){
 async function initDialogListPage(){ refreshStatus(); await loadDialogs(); }
 async function loadDialogs(){
   const box = $("dialogList"); if (!box) return;
-  setAriaBusy(box, true);
-  box.innerHTML = `<div class="empty" role="listitem">加载中...</div>`;
-  try{
-    DIALOGS = await api("/api/dialogs?limit=120");
-    renderDialogs(DIALOGS);
-  } catch(e){
-    box.innerHTML = `<div class="empty" role="listitem">${escapeHtml(e.message)}</div>`;
+  if (dialogsLoading) {
+    toast("会话列表正在刷新，请稍候");
+    return dialogsCurrentPromise;
+  }
+  dialogsLoading = true;
+  const current = (async () => {
+    setAriaBusy(box, true);
+    if (!dialogsHasLoaded) box.innerHTML = `<div class="empty" role="listitem">加载中...</div>`;
+    try{
+      DIALOGS = await api("/api/dialogs?limit=120");
+      dialogsHasLoaded = true;
+      renderCurrentDialogs();
+    } catch(e){
+      if (dialogsHasLoaded) {
+        renderCurrentDialogs();
+      } else {
+        box.innerHTML = `<div class="empty" role="listitem">${escapeHtml(e.message)}</div>`;
+      }
+      toast(e.message);
+    } finally {
+      setAriaBusy(box, false);
+    }
+  })();
+  dialogsCurrentPromise = current;
+  try {
+    return await current;
   } finally {
-    setAriaBusy(box, false);
+    if (dialogsCurrentPromise === current) dialogsCurrentPromise = null;
+    dialogsLoading = false;
   }
 }
 function dialogTypeText(d){
@@ -479,14 +502,19 @@ function renderDialogs(list, emptyText = "暂无会话"){
     box.appendChild(a);
   });
 }
-function filterDialogs(){
-  const q = $("dialogSearch").value.trim().toLowerCase();
+function dialogSearchQuery(){
+  const input = $("dialogSearch");
+  return input ? input.value.trim().toLowerCase() : "";
+}
+function renderCurrentDialogs(){
+  const q = dialogSearchQuery();
   if (!q) return renderDialogs(DIALOGS);
   renderDialogs(
     DIALOGS.filter(d => String(d.name||"").toLowerCase().includes(q) || String(d.username||"").toLowerCase().includes(q) || String(d.peer||"").toLowerCase().includes(q) || String(d.id||"").includes(q)),
     "没有匹配的会话"
   );
 }
+function filterDialogs(){ return renderCurrentDialogs(); }
 
 /* 聊天 */
 async function initSingleChatPage(peer){

@@ -1,6 +1,6 @@
 # Telegram Web 开发文档
 
-> 当前基线：Phase 43，媒体查看器准备和下载触发状态边界复核。实际代码版本以 `git log -1 --oneline` 为准。
+> 当前基线：Phase 44，会话列表刷新和搜索状态边界复核。实际代码版本以 `git log -1 --oneline` 为准。
 > 仓库：`telegram-web`
 > 应用形态：Flask + Flask-SocketIO + Telethon 的单进程个人 Telegram Web 管理界面。
 > 前端形态：Jinja 模板 + 原生 JavaScript/CSS，无 npm 构建链。
@@ -227,6 +227,8 @@ Socket.IO：
 - 登录页配置输入提供与后端边界一致的轻量 HTML 提示和隐藏辅助说明；真正校验仍以后端中文错误为准。
 - 登录页保存配置、发送验证码、提交验证码、提交 2FA、退出登录、StringSession 导入导出和 `.session` 导入导出同一时间只处理一个操作；重复触发会显示中文忙碌提示。
 - StringSession 和 `.session` 导入成功后会等待配置与顶部 Telegram 状态刷新完成，再显示成功提示。
+- 会话列表刷新中重复触发会显示中文忙碌提示；刷新完成会按当前搜索内容重新过滤。
+- 会话列表已有加载结果后刷新失败会保留当前搜索和已加载列表，并用 toast 展示错误。
 - 聊天页消息刷新和更早加载互斥；重复触发会显示中文忙碌提示。
 - 聊天页文字和文件发送中重复触发会显示中文忙碌提示；发送失败会保留输入内容和文件选择。
 - 媒体准备和媒体下载任务创建按消息 ID 做前端忙碌保护；准备或下载失败后可以重试。
@@ -492,18 +494,19 @@ rg -n "api\\(|fetch\\(|io\\(|/api/|socket|downloadMedia|prepareMedia|send" stati
 | Phase 41 | 收口下载页任务轮询、同任务操作、文件分页忙碌保护和刷新失败状态 |
 | Phase 42 | 收口聊天页消息刷新、更早加载、文字发送和文件发送的忙碌保护与失败回退 |
 | Phase 43 | 收口媒体准备、查看器下载任务创建、失败回退和按钮 busy 状态 |
+| Phase 44 | 收口会话列表刷新、搜索输入、失败回退和已加载列表保留状态 |
 
 ## 15. 后续建议
 
-下一阶段建议继续 Phase 44：会话列表刷新和搜索状态边界复核。
+下一阶段建议继续 Phase 45：顶部 Telegram 状态刷新和全局状态提示边界复核。
 
 优先检查：
 
-- 复核 `loadDialogs()`、`renderDialogs()`、`filterDialogs()` 在连续刷新、搜索输入和失败回退下的状态。
-- 复核会话列表刷新失败后搜索框、空状态、`aria-busy` 和已加载列表是否保持一致。
+- 复核 `refreshStatus()`、Socket.IO `new_message` 入口和顶部状态 live region 在连续刷新、失败回退和跨页面初始化下的状态。
+- 复核顶部状态刷新失败后文案、`aria-busy`、toast 和已有状态摘要是否保持一致。
 - 如发现状态竞态或提示延迟，优先在原生 JS 中做小范围状态控制和 smoke 覆盖。
 
 限制：
 
-- 不改变会话列表 API、鉴权逻辑、Telethon 行为或新增依赖。
+- 不改变状态 API、Socket.IO 事件、鉴权逻辑、Telethon 行为或新增依赖。
 - 不读取或提交运行数据、session、Token 或真实 Telegram 凭据。

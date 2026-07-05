@@ -709,6 +709,106 @@ async function testDialogListRendersAccessibleItemsAndBusyState() {
   expectHtmlIncludes(harness, "dialogList", ["没有匹配的会话"]);
 }
 
+async function testDialogRefreshDuplicateReusesRequestAndAppliesSearch() {
+  let releaseDialogs;
+  const harness = createHarness({
+    routes: {
+      "/api/dialogs": () => new Promise((resolve) => {
+        releaseDialogs = () => resolve([
+          { name: "Alice", username: "alice", peer: "user-1", is_group: false, is_channel: false, unread_count: 0 },
+          { name: "Work", peer: "group-1", is_group: true, is_channel: false, unread_count: 0 },
+        ]);
+      }),
+    },
+  });
+
+  const firstLoad = harness.context.loadDialogs();
+  await Promise.resolve();
+  const duplicateLoad = harness.context.loadDialogs();
+  await Promise.resolve();
+
+  assert.strictEqual(harness.calls.fetch.filter((call) => call.path === "/api/dialogs?limit=120").length, 1);
+  assert(harness.calls.toast.includes("会话列表正在刷新，请稍候"));
+
+  harness.elements.get("dialogSearch").value = "work";
+  harness.context.filterDialogs();
+  expectHtmlIncludes(harness, "dialogList", ["没有匹配的会话"]);
+
+  releaseDialogs();
+  await Promise.all([firstLoad, duplicateLoad]);
+
+  const list = harness.elements.get("dialogList");
+  const lastItem = list.appended.at(-1);
+  assert.strictEqual(list.getAttribute("aria-busy"), "false");
+  assert.strictEqual(harness.elements.get("dialogSearch").value, "work");
+  assert.strictEqual(lastItem.href, "/chat/group-1");
+  assert.strictEqual(lastItem.getAttribute("aria-label"), "Work，群组");
+}
+
+async function testDialogRefreshFailureKeepsLoadedListAndSearch() {
+  let requestCount = 0;
+  const harness = createHarness({
+    routes: {
+      "/api/dialogs": () => {
+        requestCount += 1;
+        if (requestCount === 1) {
+          return [
+            { name: "Alice", username: "alice", peer: "user-1", is_group: false, is_channel: false, unread_count: 0 },
+            { name: "Bob", peer: "user-2", is_group: false, is_channel: false, unread_count: 0 },
+          ];
+        }
+        return apiFailure("会话刷新失败", 500);
+      },
+    },
+  });
+
+  await harness.context.loadDialogs();
+  harness.elements.get("dialogSearch").value = "ali";
+  harness.context.filterDialogs();
+
+  await harness.context.loadDialogs();
+
+  const list = harness.elements.get("dialogList");
+  const lastItem = list.appended.at(-1);
+  assert.strictEqual(requestCount, 2);
+  assert.strictEqual(list.getAttribute("aria-busy"), "false");
+  assert.strictEqual(harness.elements.get("dialogSearch").value, "ali");
+  assert(harness.calls.toast.includes("会话刷新失败"));
+  assert(!htmlOf(harness, "dialogList").includes("会话刷新失败"));
+  assert.strictEqual(lastItem.href, "/chat/user-1");
+  assert.strictEqual(lastItem.getAttribute("aria-label"), "Alice，私聊，用户名 @alice");
+}
+
+async function testDialogInitialFailureShowsErrorAndCanRetry() {
+  let requestCount = 0;
+  const harness = createHarness({
+    routes: {
+      "/api/dialogs": () => {
+        requestCount += 1;
+        if (requestCount === 1) return apiFailure("会话首次加载失败", 500);
+        return [
+          { name: "Retry", peer: "retry-peer", is_group: false, is_channel: false, unread_count: 0 },
+        ];
+      },
+    },
+  });
+
+  await harness.context.loadDialogs();
+
+  assert.strictEqual(requestCount, 1);
+  assert.strictEqual(harness.elements.get("dialogList").getAttribute("aria-busy"), "false");
+  assert(harness.calls.toast.includes("会话首次加载失败"));
+  expectHtmlIncludes(harness, "dialogList", ["会话首次加载失败"]);
+
+  await harness.context.loadDialogs();
+
+  const lastItem = harness.elements.get("dialogList").appended.at(-1);
+  assert.strictEqual(requestCount, 2);
+  assert.strictEqual(lastItem.href, "/chat/retry-peer");
+  assert.strictEqual(lastItem.getAttribute("aria-label"), "Retry，私聊");
+  assert(!htmlOf(harness, "dialogList").includes("会话首次加载失败"));
+}
+
 async function testGalleryFocusTrapCyclesWithinViewerControls() {
   const harness = createHarness();
 
@@ -1586,6 +1686,9 @@ const TEST_GROUPS = [
     name: "dialogs",
     tests: [
       testDialogListRendersAccessibleItemsAndBusyState,
+      testDialogRefreshDuplicateReusesRequestAndAppliesSearch,
+      testDialogRefreshFailureKeepsLoadedListAndSearch,
+      testDialogInitialFailureShowsErrorAndCanRetry,
     ],
   },
   {
