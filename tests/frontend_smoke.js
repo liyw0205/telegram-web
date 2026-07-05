@@ -415,6 +415,143 @@ async function testChatMessageLoadAndSendUseAccessibleState() {
   assert.strictEqual(harness.elements.get("messageList").appended.at(-1).getAttribute("aria-label"), "已发送消息");
 }
 
+async function testChatTextSendBusyKeepsDraftOnFailure() {
+  let releaseSend;
+  const harness = createHarness({
+    routes: {
+      "/api/messages": [],
+      "/api/send": () => new Promise((resolve) => {
+        releaseSend = () => resolve(apiFailure("文字发送失败", 500));
+      }),
+    },
+  });
+
+  await harness.context.initSingleChatPage("peer-1");
+  harness.elements.get("textComposer").classList.add("show");
+  harness.elements.get("textComposer").setAttribute("aria-hidden", "false");
+  harness.elements.get("messageInput").value = "draft";
+
+  const firstSend = harness.context.sendText();
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.strictEqual(harness.elements.get("textComposer").getAttribute("aria-busy"), "true");
+
+  const duplicateSend = harness.context.sendText();
+  await Promise.resolve();
+
+  assert.strictEqual(harness.calls.fetch.filter((call) => call.path === "/api/send").length, 1);
+  assert(harness.calls.toast.includes("文字消息正在发送，请稍候"));
+
+  releaseSend();
+  await Promise.all([firstSend, duplicateSend]);
+
+  assert(harness.calls.toast.includes("文字发送失败"));
+  assert.strictEqual(harness.elements.get("messageInput").value, "draft");
+  assert(harness.elements.get("textComposer").classList.contains("show"));
+  assert.strictEqual(harness.elements.get("textComposer").getAttribute("aria-busy"), "false");
+}
+
+async function testChatFileSendBusyKeepsSelectionOnFailure() {
+  let releaseSend;
+  const file = { name: "photo.jpg" };
+  const harness = createHarness({
+    routes: {
+      "/api/messages": [],
+      "/api/send-file": () => new Promise((resolve) => {
+        releaseSend = () => resolve(apiFailure("文件发送失败", 500));
+      }),
+    },
+  });
+
+  await harness.context.initSingleChatPage("peer-1");
+  harness.elements.get("fileComposer").classList.add("show");
+  harness.elements.get("fileComposer").setAttribute("aria-hidden", "false");
+  harness.elements.get("sendFileInput").files = [file];
+  harness.elements.get("sendFileInput").value = "picked";
+  harness.elements.get("captionInput").value = "caption";
+
+  const firstSend = harness.context.sendFile();
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.strictEqual(harness.elements.get("fileComposer").getAttribute("aria-busy"), "true");
+
+  const duplicateSend = harness.context.sendFile();
+  await Promise.resolve();
+
+  const sendCalls = harness.calls.fetch.filter((call) => call.path === "/api/send-file");
+  assert.strictEqual(sendCalls.length, 1);
+  assert.deepStrictEqual(sendCalls[0].options.body.fields, [["peer", "peer-1"], ["caption", "caption"], ["file", file]]);
+  assert(harness.calls.toast.includes("媒体或文件正在发送，请稍候"));
+
+  releaseSend();
+  await Promise.all([firstSend, duplicateSend]);
+
+  assert(harness.calls.toast.includes("文件发送失败"));
+  assert.strictEqual(harness.elements.get("sendFileInput").value, "picked");
+  assert.strictEqual(harness.elements.get("captionInput").value, "caption");
+  assert(harness.elements.get("fileComposer").classList.contains("show"));
+  assert.strictEqual(harness.elements.get("fileComposer").getAttribute("aria-busy"), "false");
+}
+
+async function testChatRefreshAndOlderLoadsAreSerialized() {
+  let initialServed = false;
+  let releaseRefresh;
+  let releaseOlder;
+  const messagePaths = [];
+  const harness = createHarness({
+    routes: {
+      "/api/messages": (path) => {
+        messagePaths.push(path);
+        if (path.includes("offset_id=")) {
+          return new Promise((resolve) => {
+            releaseOlder = () => resolve([{ id: 5, text: "old", out: false }]);
+          });
+        }
+        if (!initialServed) {
+          initialServed = true;
+          return [{ id: 10, text: "new", out: false }];
+        }
+        return new Promise((resolve) => {
+          releaseRefresh = () => resolve([{ id: 11, text: "fresh", out: false }]);
+        });
+      },
+    },
+  });
+
+  await harness.context.initSingleChatPage("peer-1");
+
+  const refreshAction = harness.context.loadMessages();
+  await Promise.resolve();
+  await Promise.resolve();
+  const duplicateRefresh = harness.context.loadMessages();
+  const olderDuringRefresh = harness.context.loadOlderMessages();
+  await Promise.resolve();
+
+  assert.strictEqual(messagePaths.length, 2);
+  assert(harness.calls.toast.includes("消息正在刷新，请稍候"));
+
+  releaseRefresh();
+  await Promise.all([refreshAction, duplicateRefresh, olderDuringRefresh]);
+
+  const olderAction = harness.context.loadOlderMessages();
+  await Promise.resolve();
+  await Promise.resolve();
+  const duplicateOlder = harness.context.loadOlderMessages();
+  await Promise.resolve();
+
+  assert.strictEqual(messagePaths.filter((path) => path.includes("offset_id=")).length, 1);
+  assert(messagePaths.some((path) => path.includes("offset_id=11")));
+  assert(harness.calls.toast.includes("更早消息正在加载，请稍候"));
+
+  releaseOlder();
+  await Promise.all([olderAction, duplicateOlder]);
+
+  assert.strictEqual(harness.elements.get("messageList").getAttribute("aria-busy"), "false");
+  assert(harness.elements.get("messageList").appended[0].innerHTML.includes("old"));
+}
+
 async function testMediaPrepareViewerAndDownloadTaskCopy() {
   let harness = createHarness({
     routes: {
@@ -1333,6 +1470,9 @@ const TEST_GROUPS = [
     name: "chat messages",
     tests: [
       testChatMessageLoadAndSendUseAccessibleState,
+      testChatTextSendBusyKeepsDraftOnFailure,
+      testChatFileSendBusyKeepsSelectionOnFailure,
+      testChatRefreshAndOlderLoadsAreSerialized,
       testMediaPrepareViewerAndDownloadTaskCopy,
     ],
   },

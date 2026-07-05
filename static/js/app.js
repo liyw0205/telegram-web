@@ -1,6 +1,12 @@
 let DIALOGS = [];
 let CURRENT_PEER = "";
 let OLDEST_MSG_ID = 0;
+let messagesLoading = false;
+let messagesCurrentPromise = null;
+let olderMessagesLoading = false;
+let olderMessagesCurrentPromise = null;
+let textSendCurrentPromise = null;
+let fileSendCurrentPromise = null;
 let downloadsTimer = null;
 let downloadFilesOffset = 0;
 let downloadFilesHasMore = false;
@@ -518,46 +524,83 @@ async function loadMessages(){
   if (!CURRENT_PEER) return;
   const box = $("messageList");
   if (!box) return;
-  setAriaBusy(box, true);
-  box.innerHTML = `<div class="empty" role="status">加载消息中...</div>`;
-  try{
-    const msgs = await api("/api/messages?peer=" + encodeURIComponent(CURRENT_PEER) + "&limit=80");
-    box.innerHTML = "";
-    if (!msgs.length) {
-      box.innerHTML = `<div class="empty" role="status">暂无消息</div>`;
-      return;
+  if (messagesLoading) {
+    toast("消息正在刷新，请稍候");
+    return messagesCurrentPromise;
+  }
+  if (olderMessagesLoading) {
+    toast("更早消息正在加载，请稍候");
+    return olderMessagesCurrentPromise;
+  }
+  messagesLoading = true;
+  const current = (async () => {
+    setAriaBusy(box, true);
+    box.innerHTML = `<div class="empty" role="status">加载消息中...</div>`;
+    try{
+      const msgs = await api("/api/messages?peer=" + encodeURIComponent(CURRENT_PEER) + "&limit=80");
+      box.innerHTML = "";
+      if (!msgs.length) {
+        box.innerHTML = `<div class="empty" role="status">暂无消息</div>`;
+        return;
+      }
+      OLDEST_MSG_ID = msgs[0]?.id || 0;
+      const blocks = buildRenderBlocks(msgs);
+      for (const b of blocks) {
+        if (b.type === "single") appendSingleMessageBlock(b.msg, false);
+        else appendMediaGroupBlock(b.items, false);
+      }
+      box.scrollTop = box.scrollHeight;
+    } catch(e){
+      box.innerHTML = `<div class="empty" role="status">${escapeHtml(e.message)}</div>`;
+    } finally {
+      setAriaBusy(box, false);
     }
-    OLDEST_MSG_ID = msgs[0]?.id || 0;
-    const blocks = buildRenderBlocks(msgs);
-    for (const b of blocks) {
-      if (b.type === "single") appendSingleMessageBlock(b.msg, false);
-      else appendMediaGroupBlock(b.items, false);
-    }
-    box.scrollTop = box.scrollHeight;
-  } catch(e){
-    box.innerHTML = `<div class="empty" role="status">${escapeHtml(e.message)}</div>`;
+  })();
+  messagesCurrentPromise = current;
+  try {
+    return await current;
   } finally {
-    setAriaBusy(box, false);
+    if (messagesCurrentPromise === current) messagesCurrentPromise = null;
+    messagesLoading = false;
   }
 }
 async function loadOlderMessages(){
   if (!CURRENT_PEER || !OLDEST_MSG_ID) return;
   const box = $("messageList");
-  setAriaBusy(box, true);
-  try{
-    const msgs = await api(`/api/messages?peer=${encodeURIComponent(CURRENT_PEER)}&limit=40&offset_id=${encodeURIComponent(OLDEST_MSG_ID)}`);
-    if (!msgs.length) return toast("没有更早消息");
-    OLDEST_MSG_ID = msgs[0]?.id || OLDEST_MSG_ID;
-    const oldHeight = box.scrollHeight;
-    const blocks = buildRenderBlocks(msgs);
-    for (let i = blocks.length - 1; i >= 0; i--) {
-      const b = blocks[i];
-      if (b.type === "single") prependSingleMessageBlock(b.msg);
-      else prependMediaGroupBlock(b.items);
-    }
-    box.scrollTop = box.scrollHeight - oldHeight;
-  } catch(e){ toast(e.message); }
-  finally { setAriaBusy(box, false); }
+  if (!box) return;
+  if (messagesLoading) {
+    toast("消息正在刷新，请稍候");
+    return messagesCurrentPromise;
+  }
+  if (olderMessagesLoading) {
+    toast("更早消息正在加载，请稍候");
+    return olderMessagesCurrentPromise;
+  }
+  olderMessagesLoading = true;
+  const current = (async () => {
+    setAriaBusy(box, true);
+    try{
+      const msgs = await api(`/api/messages?peer=${encodeURIComponent(CURRENT_PEER)}&limit=40&offset_id=${encodeURIComponent(OLDEST_MSG_ID)}`);
+      if (!msgs.length) return toast("没有更早消息");
+      OLDEST_MSG_ID = msgs[0]?.id || OLDEST_MSG_ID;
+      const oldHeight = box.scrollHeight;
+      const blocks = buildRenderBlocks(msgs);
+      for (let i = blocks.length - 1; i >= 0; i--) {
+        const b = blocks[i];
+        if (b.type === "single") prependSingleMessageBlock(b.msg);
+        else prependMediaGroupBlock(b.items);
+      }
+      box.scrollTop = box.scrollHeight - oldHeight;
+    } catch(e){ toast(e.message); }
+    finally { setAriaBusy(box, false); }
+  })();
+  olderMessagesCurrentPromise = current;
+  try {
+    return await current;
+  } finally {
+    if (olderMessagesCurrentPromise === current) olderMessagesCurrentPromise = null;
+    olderMessagesLoading = false;
+  }
 }
 function appendSingleMessageBlock(m, scroll = true){
   const box = $("messageList"); if (!box) return;
@@ -876,36 +919,63 @@ function renderGalleryCurrent(){
 /* 发送 */
 async function sendText(){
   if (!CURRENT_PEER) return;
-  const text = $("messageInput").value;
+  if (textSendCurrentPromise) {
+    toast("文字消息正在发送，请稍候");
+    return textSendCurrentPromise;
+  }
+  const input = $("messageInput");
+  if (!input) return;
+  const text = input.value;
   if (!text.trim()) return;
   const panel = $("textComposer");
-  setAriaBusy(panel, true);
-  try{
-    const msg = await api("/api/send", { method:"POST", body: JSON.stringify({ peer: CURRENT_PEER, text }) });
-    $("messageInput").value = "";
-    appendSingleMessageBlock(msg, true);
-    $("textComposer").classList.remove("show");
-    if (panel && typeof panel.setAttribute === "function") panel.setAttribute("aria-hidden", "true");
-  } catch(e){ toast(e.message); }
-  finally { setAriaBusy(panel, false); }
+  const current = (async () => {
+    setAriaBusy(panel, true);
+    try{
+      const msg = await api("/api/send", { method:"POST", body: JSON.stringify({ peer: CURRENT_PEER, text }) });
+      input.value = "";
+      appendSingleMessageBlock(msg, true);
+      $("textComposer").classList.remove("show");
+      if (panel && typeof panel.setAttribute === "function") panel.setAttribute("aria-hidden", "true");
+    } catch(e){ toast(e.message); }
+    finally { setAriaBusy(panel, false); }
+  })();
+  textSendCurrentPromise = current;
+  try {
+    return await current;
+  } finally {
+    if (textSendCurrentPromise === current) textSendCurrentPromise = null;
+  }
 }
 async function sendFile(){
   if (!CURRENT_PEER) return;
-  const file = $("sendFileInput")?.files?.[0];
+  if (fileSendCurrentPromise) {
+    toast("媒体或文件正在发送，请稍候");
+    return fileSendCurrentPromise;
+  }
+  const fileInput = $("sendFileInput");
+  const file = fileInput?.files?.[0];
   if (!file) return toast("请选择文件");
   const panel = $("fileComposer");
-  setAriaBusy(panel, true);
   const fd = new FormData();
   fd.append("peer", CURRENT_PEER);
   fd.append("caption", $("captionInput").value || "");
   fd.append("file", file);
-  try{
-    const msg = await api("/api/send-file", { method:"POST", body: fd });
-    $("sendFileInput").value = ""; $("captionInput").value = ""; $("fileComposer").classList.remove("show");
-    if (panel && typeof panel.setAttribute === "function") panel.setAttribute("aria-hidden", "true");
-    appendSingleMessageBlock(msg, true);
-  } catch(e){ toast(e.message); }
-  finally { setAriaBusy(panel, false); }
+  const current = (async () => {
+    setAriaBusy(panel, true);
+    try{
+      const msg = await api("/api/send-file", { method:"POST", body: fd });
+      fileInput.value = ""; $("captionInput").value = ""; $("fileComposer").classList.remove("show");
+      if (panel && typeof panel.setAttribute === "function") panel.setAttribute("aria-hidden", "true");
+      appendSingleMessageBlock(msg, true);
+    } catch(e){ toast(e.message); }
+    finally { setAriaBusy(panel, false); }
+  })();
+  fileSendCurrentPromise = current;
+  try {
+    return await current;
+  } finally {
+    if (fileSendCurrentPromise === current) fileSendCurrentPromise = null;
+  }
 }
 
 /* 下载 */
