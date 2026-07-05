@@ -88,6 +88,31 @@ curl -H "X-Web-Telegram-Token: $TELEGRAM_WEB_TOKEN" http://127.0.0.1:5000/api/st
 
 不要把带真实 Token 的完整 URL、Cookie 或命令历史提交到仓库。
 
+## 全局导航和错误反馈边界
+
+顶部状态：
+
+- 页面顶部状态通过 `/api/status` 刷新，只显示 Telegram 连接/授权摘要。
+- 授权成功时显示“Telegram 已登录：<账号摘要>”；客户端已连接但未授权时显示“Telegram 已连接，未授权”；未连接时显示“Telegram 未连接”。
+- 如果状态接口因 Web Token 保护返回 401，前端会跳转 `/auth?next=...` 并抛出“需要 Web Token，请先验证”。
+- 顶部刷新按钮只刷新状态摘要，不刷新当前页面列表、消息或下载任务。
+
+底部导航：
+
+- 底部导航是主导航，包含会话、下载、诊断和登录四个入口。
+- 当前页面链接使用当前项标记；导航本身不触发 Telegram 请求，实际数据由目标页面初始化函数加载。
+
+Web Token 验证页：
+
+- `/auth` 只用于输入 Web Token 并写入本地 Cookie；错误 Token 显示“Token 不正确”。
+- API 请求缺少有效 Token 时返回“需要 Web Token，请先验证”；页面请求会跳转到 `/auth`，并通过 `next` 参数在验证成功后返回原页面。
+
+错误 ID 和 toast：
+
+- API 内部错误会返回通用错误文案和 `error_id`，不暴露内部异常细节。
+- 前端提示格式为“错误 ID: <id>”；支持剪贴板时会追加“已尝试复制”，复制失败不会阻断页面操作。
+- 需要排查时，在服务端日志中搜索 `internal api error <error_id>`。
+
 ## 登录和 Session 操作
 
 登录页保存配置时，已保存的敏感字段会显示脱敏占位符。留空规则：
@@ -150,7 +175,7 @@ curl -H "X-Web-Telegram-Token: $TELEGRAM_WEB_TOKEN" http://127.0.0.1:5000/api/di
 - `/diagnostics` 只读渲染 `/api/diagnostics` 返回的白名单状态。
 - 摘要格式为“Web Token 状态 · Token 来源 · 监听范围 · 端口 N”；不显示原始 host、URL、Token 或本地路径。
 - 配置、访问、运行和目录列表只展示布尔、枚举或数值状态；不展示 `api_hash`、手机号原文、代理原文、StringSession、`.session` 路径、Web Token、Cookie 或导出令牌。
-- 诊断接口失败时摘要区域显示错误，四组列表清空，并通过 toast 提示；如果错误包含 `error_id`，前端会展示“错误 ID”并尝试复制到剪贴板。
+- 诊断接口失败时摘要区域显示错误，四组列表清空，并通过 toast 提示；如果错误包含 `error_id`，前端会展示“错误 ID”，支持剪贴板时提示“已尝试复制”。
 
 ## 日志
 
@@ -238,7 +263,7 @@ grep 'internal api error err-id-here' "$HOME/telegram-web-logs/server.log"
 - 端口占用：设置新端口，例如 `TELEGRAM_WEB_PORT=5001 sh scripts/run-termux.sh`。
 - 对外监听启动失败：非本机监听必须设置 `TELEGRAM_WEB_TOKEN`，或先在本机 `/login` 保存 Web Token。
 - 页面跳到 `/auth`：服务启用了 Web Token；输入 Token 后会写入本地 Cookie。
-- API 返回 `需要 Web Token`：请求缺少有效 Token；使用 `/auth`、`Authorization` header 或 `X-Web-Telegram-Token` header。
+- API 返回 `需要 Web Token，请先验证`：请求缺少有效 Token；使用 `/auth`、`Authorization` header 或 `X-Web-Telegram-Token` header。
 - `/api/diagnostics` 探测失败：确认服务正在运行；如启用了 Web Token，优先用 `TELEGRAM_WEB_TOKEN` 环境变量启动，或手动通过 header 访问。
 - API 返回 `Telegram 未登录`：先打开 `/login` 完成手机号、验证码和 2FA 登录，或导入 StringSession / `.session`。
 - 代理错误：仅支持 `socks4://` 或 `socks5://`，不能带 path、query 或 fragment。

@@ -315,9 +315,26 @@ class FlaskBoundaryTest(unittest.TestCase):
         html = response.get_data(as_text=True)
         for fragment in (
             'id="topStatus" class="app-subtitle" role="status" aria-live="polite" aria-atomic="true"',
-            'onclick="refreshStatus()" aria-label="刷新连接状态" title="刷新连接状态"',
+            'type="button" onclick="refreshStatus()" aria-label="刷新 Telegram 连接状态" title="刷新 Telegram 连接状态"',
+            '<nav class="bottom-nav" aria-label="主导航">',
+            'href="/login" aria-label="打开登录页" aria-current="page"',
             'id="toast" role="status" aria-live="polite" aria-atomic="false"',
             'class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="confirmTitle" aria-describedby="confirmMessage"',
+        ):
+            self.assertIn(fragment, html)
+
+    def test_auth_page_has_accessible_token_form_semantics(self):
+        with patch.dict(webapp.os.environ, {"TELEGRAM_WEB_TOKEN": "12345678"}, clear=True):
+            response = self.client.get("/auth?next=/chats")
+            self.addCleanup(response.close)
+        html = response.get_data(as_text=True)
+        for fragment in (
+            '<section class="phone-card" aria-labelledby="authTitle">',
+            '<h1 id="authTitle">访问验证</h1>',
+            '<section class="card" aria-labelledby="authFormTitle">',
+            '<h2 id="authFormTitle">Web Token</h2>',
+            '<label for="authToken">Token</label>',
+            'id="authToken" name="token" type="password" autocomplete="current-password" autofocus aria-label="Web Token"',
         ):
             self.assertIn(fragment, html)
 
@@ -680,6 +697,7 @@ class WebAuthTest(unittest.TestCase):
             response = self.client.get("/api/tasks")
             self.assertEqual(response.status_code, 401)
             self.assertFalse(response.get_json()["success"])
+            self.assertEqual(response.get_json()["error"], "需要 Web Token，请先验证")
 
             response = self.client.get("/api/tasks", headers={"X-Web-Telegram-Token": "12345678"})
             self.assertEqual(response.status_code, 200)

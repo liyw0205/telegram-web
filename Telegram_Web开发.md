@@ -48,7 +48,7 @@
 | `templates/diagnostics.html` | 只读脱敏诊断页面 |
 | `static/js/app.js` | 前端 API 封装、Socket.IO、会话/消息/媒体/下载交互 |
 | `static/css/app.css` | 全站样式和移动端布局 |
-| `tests/frontend_smoke.js` | 纯 Node 前端行为 smoke，按确认弹窗、媒体查看器、聊天消息、会话列表、登录页/API、session/任务确认、下载页和诊断页分组，在 mock 浏览器环境验证自定义敏感确认、键盘焦点循环、媒体查看器键盘交互和焦点循环、聊天消息状态、会话列表状态、导出令牌、API 错误、登录页配置、下载页状态和诊断页脱敏渲染 |
+| `tests/frontend_smoke.js` | 纯 Node 前端行为 smoke，按确认弹窗、媒体查看器、聊天消息、会话列表、登录页/API、session/任务确认、下载页和诊断页分组，在 mock 浏览器环境验证自定义敏感确认、键盘焦点循环、媒体查看器键盘交互和焦点循环、聊天消息状态、会话列表状态、导出令牌、API 错误 ID 展示和复制尝试、登录页配置、下载页状态和诊断页脱敏渲染 |
 | `docs/browser-smoke.md` | 真实浏览器手动 smoke 验证清单和后续 Playwright 引入边界 |
 | `scripts/check-browser-smoke-env.sh` | 检查当前 shell 是否具备浏览器自动化 smoke 条件，不安装依赖 |
 | `docs/runtime-runbook.md` | 启动、访问、日志观察、Web Token 和常见故障排查清单 |
@@ -520,3 +520,5 @@ rg -n "api\\(|fetch\\(|io\\(|/api/|socket|downloadMedia|prepareMedia|send" stati
 2026-07-05：Phase 32 对齐聊天页文字/文件发送、媒体缩略图、按需准备、下载任务创建和媒体查看器文案，补充 README、runbook、浏览器 smoke 与前端/后端测试断言；未改发送、媒体缓存或下载任务行为。
 
 2026-07-05：Phase 33 对齐会话列表搜索字段、无匹配空状态、诊断摘要端口和运行端口文案，补充 README、runbook、浏览器 smoke 与前端/后端测试断言；未改会话加载、诊断采集、脱敏、鉴权或 API 行为。
+
+2026-07-05：Phase 34 对齐顶部 Telegram 状态、主导航当前项、Web Token 验证页、401 提示和错误 ID 复制提示文案，补充 README、runbook、浏览器 smoke 与前端/后端测试断言；未改鉴权判断、Socket.IO、错误包装结构或导航目标。

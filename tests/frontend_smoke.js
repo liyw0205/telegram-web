@@ -520,7 +520,7 @@ async function testApiCopiesErrorIdAndKeepsMessageActionable() {
   await assert.rejects(
     () => harness.context.api("/api/broken"),
     (err) => {
-      assert.strictEqual(err.message, "内部错误（错误 ID: err-phase10）");
+      assert.strictEqual(err.message, "内部错误（错误 ID: err-phase10，已尝试复制）");
       assert.strictEqual(err.errorId, "err-phase10");
       return true;
     },
@@ -538,7 +538,7 @@ async function testApiRedirectsUnauthorizedToAuthPage() {
 
   await assert.rejects(
     () => harness.context.api("/api/protected"),
-    /需要 Web Token/,
+    /需要 Web Token，请先验证/,
   );
   assert.strictEqual(harness.context.location.href, "/auth?next=%2Flogin%3Ftoken%3Dweb-token");
 }
@@ -594,7 +594,7 @@ async function testRefreshStatusUpdatesLiveRegionBusyState() {
   await harness.context.refreshStatus();
 
   assert.strictEqual(harness.calls.fetch[0].path, "/api/status");
-  assert.strictEqual(textOf(harness, "topStatus"), "已登录：alice");
+  assert.strictEqual(textOf(harness, "topStatus"), "Telegram 已登录：alice");
   assert.strictEqual(harness.elements.get("topStatus").getAttribute("aria-busy"), "false");
 }
 

@@ -517,7 +517,7 @@ def safe_next_url(value):
 
 def unauthorized_response():
     if request.path.startswith("/api/"):
-        return fail(ApiError("需要 Web Token", 401))
+        return fail(ApiError("需要 Web Token，请先验证", 401))
     if request.path.startswith(("/download-file/", "/pictures/", "/media-cache/")):
         abort(401)
     return redirect("/auth?next=" + quote(request.full_path if request.query_string else request.path, safe=""))

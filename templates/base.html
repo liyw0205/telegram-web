@@ -10,20 +10,20 @@
 <header class="topbar">
   <div>
     <div class="app-title">Telegram</div>
-    <div id="topStatus" class="app-subtitle" role="status" aria-live="polite" aria-atomic="true">状态检查中...</div>
+    <div id="topStatus" class="app-subtitle" role="status" aria-live="polite" aria-atomic="true">Telegram 状态检查中...</div>
   </div>
-  <button class="round-btn" onclick="refreshStatus()" aria-label="刷新连接状态" title="刷新连接状态">↻</button>
+  <button class="round-btn" type="button" onclick="refreshStatus()" aria-label="刷新 Telegram 连接状态" title="刷新 Telegram 连接状态">↻</button>
 </header>
 
 <main class="page">
   {% block content %}{% endblock %}
 </main>
 
-<nav class="bottom-nav">
-  <a class="{{ 'active' if active == 'chats' else '' }}" href="/chats"><span>💬</span><b>会话</b></a>
-  <a class="{{ 'active' if active == 'downloads' else '' }}" href="/downloads"><span>⬇️</span><b>下载</b></a>
-  <a class="{{ 'active' if active == 'diagnostics' else '' }}" href="/diagnostics"><span>◷</span><b>诊断</b></a>
-  <a class="{{ 'active' if active == 'login' else '' }}" href="/login"><span>👤</span><b>登录</b></a>
+<nav class="bottom-nav" aria-label="主导航">
+  <a class="{{ 'active' if active == 'chats' else '' }}" href="/chats" aria-label="打开会话列表"{% if active == 'chats' %} aria-current="page"{% endif %}><span aria-hidden="true">💬</span><b>会话</b></a>
+  <a class="{{ 'active' if active == 'downloads' else '' }}" href="/downloads" aria-label="打开下载页"{% if active == 'downloads' %} aria-current="page"{% endif %}><span aria-hidden="true">⬇️</span><b>下载</b></a>
+  <a class="{{ 'active' if active == 'diagnostics' else '' }}" href="/diagnostics" aria-label="打开诊断页"{% if active == 'diagnostics' %} aria-current="page"{% endif %}><span aria-hidden="true">◷</span><b>诊断</b></a>
+  <a class="{{ 'active' if active == 'login' else '' }}" href="/login" aria-label="打开登录页"{% if active == 'login' %} aria-current="page"{% endif %}><span aria-hidden="true">👤</span><b>登录</b></a>
 </nav>
 
 <div id="toast" role="status" aria-live="polite" aria-atomic="false"></div>

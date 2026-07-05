@@ -123,13 +123,14 @@ async function api(path, options = {}){
   const data = await res.json().catch(() => ({}));
   if (res.status === 401) {
     location.href = "/auth?next=" + encodeURIComponent(location.pathname + location.search);
-    throw new Error("需要 Web Token");
+    throw new Error("需要 Web Token，请先验证");
   }
   if (!res.ok || data.success === false) {
     const message = data.error || data.message || "请求失败";
     if (data.error_id) {
+      const copyHint = navigator.clipboard ? "，已尝试复制" : "";
       if (navigator.clipboard) navigator.clipboard.writeText(data.error_id).catch(() => {});
-      const err = new Error(`${message}（错误 ID: ${data.error_id}）`);
+      const err = new Error(`${message}（错误 ID: ${data.error_id}${copyHint}）`);
       err.errorId = data.error_id;
       throw err;
     }
@@ -261,11 +262,11 @@ async function refreshStatus(){
     if (!top) return;
     if (d.authorized) {
       const me = d.me || {};
-      top.textContent = "已登录：" + (me.username || me.first_name || me.phone || me.id);
-    } else if (d.connected) top.textContent = "已连接，未授权";
-    else top.textContent = "未连接";
-  } catch {
-    if (top) top.textContent = "状态异常";
+      top.textContent = "Telegram 已登录：" + (me.username || me.first_name || me.phone || me.id);
+    } else if (d.connected) top.textContent = "Telegram 已连接，未授权";
+    else top.textContent = "Telegram 未连接";
+  } catch(e) {
+    if (top) top.textContent = e.message || "Telegram 状态异常";
   } finally {
     setAriaBusy(top, false);
   }

@@ -49,7 +49,7 @@ node tests/frontend_smoke.js
 git diff --check
 ```
 
-`tests/frontend_smoke.js` 使用纯 Node mock 浏览器环境，按确认弹窗、媒体查看器、聊天消息、会话列表、登录页/API、session/任务确认、下载页和诊断页分组覆盖前端自定义敏感确认弹窗、键盘焦点循环、媒体查看器键盘交互、焦点恢复和焦点循环、聊天加载/发送状态、会话搜索和会话项语义、一次性 session 导出令牌请求链、API 错误 ID 复制、401 跳转、登录页脱敏配置占位符、任务删除确认、下载任务渲染、下载文件分页、诊断页脱敏渲染和错误提示，不需要真实 Telegram 登录或浏览器。
+`tests/frontend_smoke.js` 使用纯 Node mock 浏览器环境，按确认弹窗、媒体查看器、聊天消息、会话列表、登录页/API、session/任务确认、下载页和诊断页分组覆盖前端自定义敏感确认弹窗、键盘焦点循环、媒体查看器键盘交互、焦点恢复和焦点循环、聊天加载/发送状态、会话搜索和会话项语义、一次性 session 导出令牌请求链、API 错误 ID 展示和复制尝试、401 跳转、登录页脱敏配置占位符、任务删除确认、下载任务渲染、下载文件分页、诊断页脱敏渲染和错误提示，不需要真实 Telegram 登录或浏览器。
 
 真实浏览器 smoke 目前作为可选手动验证：先运行 `sh scripts/check-browser-smoke-env.sh` 查看本机是否具备自动化条件，再按 `docs/browser-smoke.md` 执行页面和键盘交互清单。该检查脚本只报告命令和 Node 模块可用性，不安装依赖，不读取运行数据。
 
@@ -134,6 +134,7 @@ TELEGRAM_WEB_HOST=0.0.0.0 TELEGRAM_WEB_PORT=5000 TELEGRAM_WEB_TOKEN=your-strong-
 - `data/`、`Download/`、`Pictures/` 和 `.session` 文件是本地运行数据，不要提交到 Git
 - 当前登录页开放手机号登录、验证码、2FA、StringSession 导入导出和 `.session` 文件导入导出
 - 敏感配置字段已保存时会显示脱敏占位符；`api_hash`、含凭据代理、StringSession、`.session` 文件名和 Web Token 留空会沿用已保存值
+- 顶部状态只显示 Telegram 连接/授权摘要或 Web Token 验证提示；底部导航标记当前页面，不加载额外数据
 - Session 文件名只接受 `data/` 目录内文件名，可填写 `telegram` 或 `telegram.session`，实际存储文件会使用 `.session` 后缀
 - StringSession 导出会先弹出确认，成功后填入登录页文本框并尝试复制到剪贴板
 - `.session` 文件导入会重置当前客户端并切换到导入会话；导出会打开一次性令牌下载链接
@@ -143,8 +144,9 @@ TELEGRAM_WEB_HOST=0.0.0.0 TELEGRAM_WEB_PORT=5000 TELEGRAM_WEB_TOKEN=your-strong-
 
 ## 日志和错误 ID
 
-- API 内部错误会返回 `error_id`，前端会在提示中展示并尝试复制到剪贴板。
+- API 内部错误会返回 `error_id`；前端会在提示中展示错误 ID，支持剪贴板时提示“已尝试复制”。
 - 前台运行时可在服务端终端日志中搜索：`internal api error <error_id>`。
+- API 或页面提示“需要 Web Token，请先验证”时，会跳转或引导到 `/auth` 输入 Web Token。
 - 使用 `tmux` 时先执行 `tmux attach -t telegram-web` 回到运行窗口，再按错误 ID 检索当前终端缓冲或用户自己的日志文件。
 - 可用 `TELEGRAM_WEB_DIAGNOSTICS_URL=http://127.0.0.1:5000/api/diagnostics sh scripts/diagnose-runtime.sh` 对运行中的脱敏诊断接口做可选 HTTP 探测。
 

@@ -1,18 +1,18 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="phone-card">
+<section class="phone-card" aria-labelledby="authTitle">
   <div class="login-avatar">🔒</div>
-  <h1>访问验证</h1>
+  <h1 id="authTitle">访问验证</h1>
   <p>输入 Web Token 后继续使用</p>
 </section>
 
-<section class="card">
-  <h2>Web Token</h2>
-  {% if error %}<div class="empty">{{ error }}</div>{% endif %}
+<section class="card" aria-labelledby="authFormTitle">
+  <h2 id="authFormTitle">Web Token</h2>
+  {% if error %}<div class="empty" role="alert">{{ error }}</div>{% endif %}
   <form method="post" action="/auth">
     <input type="hidden" name="next" value="{{ next_url }}">
-    <label>Token</label>
-    <input name="token" type="password" autocomplete="current-password" autofocus>
+    <label for="authToken">Token</label>
+    <input id="authToken" name="token" type="password" autocomplete="current-password" autofocus aria-label="Web Token">
     <button type="submit">进入</button>
   </form>
 </section>
