@@ -580,6 +580,101 @@ async function testLoadLoginPageUsesRedactedConfigPlaceholders() {
   assert.strictEqual(harness.elements.get("web_token").placeholder, "已保存，留空不修改 Web Token");
 }
 
+async function testLoginConfigPayloadSaveAndStartBoundaries() {
+  const harness = createHarness({
+    routes: {
+      "/api/config": {
+        api_id: 123,
+        api_hash_saved: false,
+        phone: "+8613800000000",
+        proxy: "",
+        proxy_redacted: false,
+        session_type: "file",
+        session_file_saved: false,
+        string_session_saved: false,
+        download_threads: 16,
+        cache_limit_mb: 1024,
+        web_token_saved: false,
+      },
+      "/api/login/start": { message: "验证码已发送" },
+      "/api/status": { connected: true, authorized: false },
+    },
+  });
+
+  harness.elements.get("api_id").value = "123456";
+  harness.elements.get("api_hash").value = "abcdefabcdefabcdefabcdefabcdefab";
+  harness.elements.get("phone").value = "+8613812345678";
+  harness.elements.get("proxy").value = "socks5://127.0.0.1";
+  harness.elements.get("session_type").value = "file";
+  harness.elements.get("session_file").value = "custom.session";
+  harness.elements.get("string_session").value = "1A";
+  harness.elements.get("download_threads").value = "32";
+  harness.elements.get("cache_limit_mb").value = "512";
+  harness.elements.get("web_token").value = "12345678";
+
+  await harness.context.saveLoginConfig();
+  assert.strictEqual(harness.calls.fetch[0].path, "/api/config");
+  assert.strictEqual(harness.calls.fetch[0].options.method, "POST");
+  assert.deepStrictEqual(JSON.parse(harness.calls.fetch[0].options.body), {
+    api_id: 123456,
+    api_hash: "abcdefabcdefabcdefabcdefabcdefab",
+    phone: "+8613812345678",
+    proxy: "socks5://127.0.0.1",
+    session_type: "file",
+    session_file: "custom.session",
+    string_session: "1A",
+    download_threads: 32,
+    cache_limit_mb: 512,
+    web_token: "12345678",
+  });
+  assert(harness.calls.toast.includes("配置已保存"));
+
+  harness.calls.fetch.length = 0;
+  harness.calls.toast.length = 0;
+  await harness.context.startLogin();
+  assert.strictEqual(harness.calls.fetch[0].path, "/api/login/start");
+  assert.strictEqual(harness.calls.fetch[0].options.method, "POST");
+  assert.deepStrictEqual(JSON.parse(harness.calls.fetch[0].options.body), {
+    api_id: 123456,
+    api_hash: "abcdefabcdefabcdefabcdefabcdefab",
+    phone: "+8613812345678",
+    proxy: "socks5://127.0.0.1",
+    session_type: "file",
+    session_file: "custom.session",
+    string_session: "1A",
+    download_threads: 32,
+    cache_limit_mb: 512,
+  });
+  assert(!JSON.parse(harness.calls.fetch[0].options.body).web_token);
+  assert(harness.calls.toast.includes("验证码已发送"));
+}
+
+async function testLoginConfigErrorsSurfaceBackendCopy() {
+  const saveHarness = createHarness({
+    routes: {
+      "/api/config": apiFailure("download_threads 必须在 1..128 之间", 400),
+    },
+  });
+
+  saveHarness.elements.get("download_threads").value = "0";
+  await saveHarness.context.saveLoginConfig();
+  assert.strictEqual(saveHarness.calls.fetch[0].path, "/api/config");
+  assert(saveHarness.calls.toast.includes("download_threads 必须在 1..128 之间"));
+
+  const startHarness = createHarness({
+    routes: {
+      "/api/login/start": apiFailure("api_hash 必须是 32 位十六进制字符串", 400),
+    },
+  });
+
+  startHarness.elements.get("api_id").value = "123";
+  startHarness.elements.get("api_hash").value = "bad";
+  startHarness.elements.get("phone").value = "+8613812345678";
+  await startHarness.context.startLogin();
+  assert.strictEqual(startHarness.calls.fetch[0].path, "/api/login/start");
+  assert(startHarness.calls.toast.includes("api_hash 必须是 32 位十六进制字符串"));
+}
+
 async function testRefreshStatusUpdatesLiveRegionBusyState() {
   const harness = createHarness({
     routes: {
@@ -877,6 +972,8 @@ const TEST_GROUPS = [
       testApiCopiesErrorIdAndKeepsMessageActionable,
       testApiRedirectsUnauthorizedToAuthPage,
       testLoadLoginPageUsesRedactedConfigPlaceholders,
+      testLoginConfigPayloadSaveAndStartBoundaries,
+      testLoginConfigErrorsSurfaceBackendCopy,
       testRefreshStatusUpdatesLiveRegionBusyState,
     ],
   },

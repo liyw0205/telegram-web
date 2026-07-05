@@ -49,7 +49,7 @@ node tests/frontend_smoke.js
 git diff --check
 ```
 
-`tests/frontend_smoke.js` 使用纯 Node mock 浏览器环境，按确认弹窗、媒体查看器、聊天消息、会话列表、登录页/API、session/任务确认、下载页和诊断页分组覆盖前端自定义敏感确认弹窗、键盘焦点循环、媒体查看器键盘交互、焦点恢复和焦点循环、聊天加载/发送状态、会话搜索和会话项语义、一次性 session 导出令牌请求链、API 错误 ID 展示和复制尝试、401 跳转、登录页脱敏配置占位符、任务删除确认、下载任务渲染、下载文件分页、诊断页脱敏渲染和错误提示，不需要真实 Telegram 登录或浏览器。
+`tests/frontend_smoke.js` 使用纯 Node mock 浏览器环境，按确认弹窗、媒体查看器、聊天消息、会话列表、登录页/API、session/任务确认、下载页和诊断页分组覆盖前端自定义敏感确认弹窗、键盘焦点循环、媒体查看器键盘交互、焦点恢复和焦点循环、聊天加载/发送状态、会话搜索和会话项语义、一次性 session 导出令牌请求链、API 错误 ID 展示和复制尝试、401 跳转、登录页脱敏配置占位符、配置保存和发送验证码 payload 边界、后端中文错误 toast、任务删除确认、下载任务渲染、下载文件分页、诊断页脱敏渲染和错误提示，不需要真实 Telegram 登录或浏览器。
 
 真实浏览器 smoke 目前作为可选手动验证：先运行 `sh scripts/check-browser-smoke-env.sh` 查看本机是否具备自动化条件，再按 `docs/browser-smoke.md` 执行页面和键盘交互清单。该检查脚本只报告命令和 Node 模块可用性，不安装依赖，不读取运行数据。
 
@@ -99,10 +99,10 @@ TELEGRAM_WEB_HOST=0.0.0.0 TELEGRAM_WEB_PORT=5000 TELEGRAM_WEB_TOKEN=your-strong-
 
 登录页需要填写：
 
-- `api_id`：1 到 2147483647 的数字。
-- `api_hash`：32 位十六进制字符串；已保存时留空沿用当前值。
+- `api_id`：1 到 2147483647 的数字；登录页提供数字输入提示。
+- `api_hash`：32 位十六进制字符串；已保存时留空沿用当前值，登录页不会回显已保存值。
 - 手机号：可带 `+`，数字长度 5 到 20。
-- 代理（可选）：仅支持 `socks4://` 或 `socks5://`，host 必填，端口默认 1080 且必须在 1 到 65535 之间，不能包含 path、query 或 fragment。
+- 代理（可选）：仅支持 `socks4://` 或 `socks5://`，host 必填，端口默认 1080 且必须在 1 到 65535 之间，不能包含 path、query 或 fragment；含凭据代理不会回显原文。
 - Session 类型：`file` 或 `string`；选择 `string` 时需要已保存或本次填写有效 StringSession。
 - Session 文件名：只接受 `data/` 目录内文件名，可带或不带 `.session` 后缀。
 - 下载线程数：1 到 128。

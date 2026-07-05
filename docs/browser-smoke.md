@@ -69,6 +69,7 @@ Web Token 验证页：
 
 - `/login` 的介绍区域、手机号登录区域和 Session 迁移区域标题清晰。
 - `api_id`、`api_hash`、手机号、SOCKS4/5 代理、Session 文件名、StringSession、下载线程、缓存上限、Web Token 和 `.session` 上传控件都有可理解标签。
+- `api_id`、`api_hash`、手机号、SOCKS4/5 代理、下载线程和缓存上限的输入提示与后端范围一致；这些提示不能替代后端校验。
 - 敏感字段已保存时显示脱敏占位符或“已保存”说明，不显示真实 `api_hash`、StringSession、Web Token、代理凭据或 `.session` 内容。
 - “登录操作”、“StringSession 操作”和“.session 文件操作”各自成组，按钮可用键盘聚焦和触发。
 - 使用测试输入触发配置错误时，页面显示后端中文错误，例如 `api_id 必须在 1..2147483647 之间`、`api_hash 必须是 32 位十六进制字符串`、`代理端口必须在 1..65535 之间`、`download_threads 必须在 1..128 之间`，不显示英文内部异常。

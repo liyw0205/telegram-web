@@ -8,12 +8,14 @@
 
 <section class="card" aria-labelledby="loginConfigTitle">
   <h2 id="loginConfigTitle">手机号登录</h2>
-  <label for="api_id">api_id</label><input id="api_id" inputmode="numeric" autocomplete="off" placeholder="123456">
-  <label for="api_hash">api_hash</label><input id="api_hash" autocomplete="off" aria-describedby="apiHashHelp" placeholder="api_hash">
-  <p id="apiHashHelp" class="sr-only">已保存时留空会沿用当前 api_hash。</p>
-  <label for="phone">手机号</label><input id="phone" autocomplete="tel" placeholder="+8613812345678">
+  <label for="api_id">api_id</label><input id="api_id" inputmode="numeric" autocomplete="off" aria-describedby="apiIdHelp" pattern="[0-9]*" placeholder="123456">
+  <p id="apiIdHelp" class="sr-only">必须是 1 到 2147483647 之间的数字。</p>
+  <label for="api_hash">api_hash</label><input id="api_hash" autocomplete="off" spellcheck="false" aria-describedby="apiHashHelp" pattern="[0-9a-fA-F]{32}" placeholder="32 位十六进制字符串">
+  <p id="apiHashHelp" class="sr-only">必须是 32 位十六进制字符串；已保存时留空会沿用当前 api_hash。</p>
+  <label for="phone">手机号</label><input id="phone" inputmode="tel" autocomplete="tel" aria-describedby="phoneHelp" pattern="\+?[0-9]{5,20}" placeholder="+8613812345678">
+  <p id="phoneHelp" class="sr-only">可带加号，数字长度 5 到 20。</p>
   <label for="proxy">SOCKS4/5 代理</label><input id="proxy" autocomplete="off" aria-describedby="proxyHelp" placeholder="socks5://127.0.0.1:7890">
-  <p id="proxyHelp" class="sr-only">仅支持 socks4:// 或 socks5://，host 必填，端口默认 1080；已保存代理时留空会沿用当前代理。</p>
+  <p id="proxyHelp" class="sr-only">仅支持 socks4:// 或 socks5://，host 必填，端口默认 1080 且必须在 1 到 65535 之间；不能包含 path、query 或 fragment；已保存代理时留空会沿用当前代理。</p>
   <label for="session_type">Session 类型</label>
   <select id="session_type" autocomplete="off">
     <option value="file">.session 文件</option>
@@ -23,8 +25,10 @@
   <p id="sessionFileHelp" class="sr-only">只填写 data 目录内文件名，可带或不带 .session 后缀；已保存时留空会沿用当前 .session 文件。</p>
   <label for="string_session">StringSession</label><textarea id="string_session" autocomplete="off" spellcheck="false" aria-describedby="stringSessionHelp" placeholder="导入时粘贴 StringSession，留空则沿用已保存值"></textarea>
   <p id="stringSessionHelp" class="sr-only">已保存时留空会沿用当前 StringSession。</p>
-  <label for="download_threads">下载线程</label><input id="download_threads" type="number" min="1" max="128" value="16">
-  <label for="cache_limit_mb">缓存上限(MB)</label><input id="cache_limit_mb" type="number" min="128" max="10240" value="1024">
+  <label for="download_threads">下载线程</label><input id="download_threads" type="number" min="1" max="128" inputmode="numeric" aria-describedby="downloadThreadsHelp" value="16">
+  <p id="downloadThreadsHelp" class="sr-only">必须是 1 到 128 之间的数字。</p>
+  <label for="cache_limit_mb">缓存上限(MB)</label><input id="cache_limit_mb" type="number" min="128" max="10240" inputmode="numeric" aria-describedby="cacheLimitHelp" value="1024">
+  <p id="cacheLimitHelp" class="sr-only">必须是 128 到 10240 之间的数字。</p>
   <label for="web_token">Web Token</label><input id="web_token" type="password" autocomplete="new-password" aria-describedby="webTokenHelp" placeholder="可选，保存后访问需要 Token">
   <p id="webTokenHelp" class="sr-only">长度 8 到 256 字符，不能包含空白；已保存时留空不会修改 Web Token。</p>
 

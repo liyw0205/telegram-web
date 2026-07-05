@@ -1,6 +1,6 @@
 # Telegram Web 开发文档
 
-> 当前基线：Phase 36，文档重生成。实际代码版本以 `git log -1 --oneline` 为准。
+> 当前基线：Phase 37，登录页配置输入提示和前端错误展示边界复核。实际代码版本以 `git log -1 --oneline` 为准。
 > 仓库：`telegram-web`
 > 应用形态：Flask + Flask-SocketIO + Telethon 的单进程个人 Telegram Web 管理界面。
 > 前端形态：Jinja 模板 + 原生 JavaScript/CSS，无 npm 构建链。
@@ -224,6 +224,7 @@ Socket.IO：
 - 敏感操作使用自定义确认弹窗，支持取消、确认、Esc 关闭、Tab/Shift+Tab 焦点循环。
 - 媒体查看器支持焦点恢复、Esc 关闭、左右方向键切换和焦点循环。
 - 登录、会话、聊天、下载和诊断页面都有标题关联、列表语义、live region 或动态 `aria-busy`。
+- 登录页配置输入提供与后端边界一致的轻量 HTML 提示和隐藏辅助说明；真正校验仍以后端中文错误为准。
 - 下载页文件分页状态和加载更多按钮保持可访问状态。
 - 前端 API 错误统一通过 toast 展示；401 会跳转 `/auth?next=...`。
 
@@ -478,16 +479,17 @@ rg -n "api\\(|fetch\\(|io\\(|/api/|socket|downloadMedia|prepareMedia|send" stati
 | Phase 34 | 对齐顶部状态、主导航、Web Token 验证页、401 提示和错误 ID 复制提示 |
 | Phase 35 | 对齐配置校验、JSON、分页、Range 和代理端口错误文案，收敛代理端口错误 |
 | Phase 36 | 重生成主开发文档，按当前代码和文档基线重整架构、边界、验证和阶段制度 |
+| Phase 37 | 对齐登录页配置输入提示、隐藏辅助说明、前端 payload smoke 和后端中文错误 toast 覆盖 |
 
 ## 15. 后续建议
 
-下一阶段建议继续 Phase 37：登录页配置输入提示和前端错误展示边界复核。
+下一阶段建议继续 Phase 38：真实浏览器手动 smoke 条件和登录页提示回归收口。
 
 优先检查：
 
-- `templates/login.html` 输入控件、placeholder、隐藏说明和轻量 HTML 属性。
-- `static/js/app.js` 中 `loadLoginPage()`、`loginConfigPayload()`、`saveLoginConfig()`、`startLogin()` 的错误展示。
-- README、runbook、browser smoke 和测试断言是否与后端实际边界一致。
+- 按 `docs/browser-smoke.md` 复核 `/login` 在桌面和窄屏下的提示、脱敏占位符、toast 和键盘操作。
+- 继续确认真实浏览器自动化条件；如仍缺 Playwright/浏览器命令，不引入新依赖，只更新手动 smoke 结论。
+- 若发现实际浏览器中提示属性、布局或 toast 可见性问题，优先做小范围 CSS/模板修正。
 
 限制：
 
