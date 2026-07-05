@@ -278,7 +278,7 @@ async function loadLoginPage(){
     const cfg = await api("/api/config");
     $("api_id").value = cfg.api_id || "";
     $("api_hash").value = "";
-    $("api_hash").placeholder = cfg.api_hash_saved ? "已保存，留空沿用当前 api_hash" : "api_hash";
+    $("api_hash").placeholder = cfg.api_hash_saved ? "已保存，留空沿用当前 api_hash" : "32 位十六进制字符串";
     $("phone").value = cfg.phone || "";
     $("proxy").value = cfg.proxy || "";
     $("proxy").placeholder = cfg.proxy_redacted ? "已保存含凭据代理，留空沿用" : "socks5://127.0.0.1:7890";

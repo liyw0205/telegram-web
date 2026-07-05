@@ -580,6 +580,36 @@ async function testLoadLoginPageUsesRedactedConfigPlaceholders() {
   assert.strictEqual(harness.elements.get("web_token").placeholder, "已保存，留空不修改 Web Token");
 }
 
+async function testLoadLoginPageUsesUnsavedConfigGuidance() {
+  const harness = createHarness({
+    routes: {
+      "/api/config": {
+        api_id: 0,
+        api_hash_saved: false,
+        phone: "",
+        proxy: "",
+        proxy_redacted: false,
+        session_type: "file",
+        session_file_saved: false,
+        string_session_saved: false,
+        download_threads: 16,
+        cache_limit_mb: 1024,
+        web_token_saved: false,
+      },
+    },
+  });
+
+  await harness.context.loadLoginPage();
+
+  assert.strictEqual(harness.elements.get("api_id").value, "");
+  assert.strictEqual(harness.elements.get("api_hash").value, "");
+  assert.strictEqual(harness.elements.get("api_hash").placeholder, "32 位十六进制字符串");
+  assert.strictEqual(harness.elements.get("proxy").placeholder, "socks5://127.0.0.1:7890");
+  assert.strictEqual(harness.elements.get("session_file").placeholder, "telegram.session");
+  assert.strictEqual(harness.elements.get("string_session").placeholder, "导入或登录后自动保存");
+  assert.strictEqual(harness.elements.get("web_token").placeholder, "可选，8-256 字符，不能含空白");
+}
+
 async function testLoginConfigPayloadSaveAndStartBoundaries() {
   const harness = createHarness({
     routes: {
@@ -972,6 +1002,7 @@ const TEST_GROUPS = [
       testApiCopiesErrorIdAndKeepsMessageActionable,
       testApiRedirectsUnauthorizedToAuthPage,
       testLoadLoginPageUsesRedactedConfigPlaceholders,
+      testLoadLoginPageUsesUnsavedConfigGuidance,
       testLoginConfigPayloadSaveAndStartBoundaries,
       testLoginConfigErrorsSurfaceBackendCopy,
       testRefreshStatusUpdatesLiveRegionBusyState,

@@ -8,6 +8,8 @@ Phase 20 重新运行 `sh scripts/check-browser-smoke-env.sh` 后结论不变：
 
 Phase 27 继续复核自动化边界：当前仓库仍无 npm 浏览器测试入口，本阶段只把 Phase 21-26 的可访问性语义改动纳入手动浏览器回归清单，不引入 Playwright、Puppeteer、Selenium、浏览器安装脚本或真实账号数据。
 
+Phase 38 再次运行 `sh scripts/check-browser-smoke-env.sh` 后结论不变：Node/npm/npx 可用，Playwright Node 模块缺失，常见浏览器命令缺失。因此本阶段只收口登录页提示的纯 Node smoke 覆盖和手动清单，不引入 Playwright、Puppeteer、Selenium、浏览器安装脚本或真实账号数据。
+
 因此当前仍以纯 Node smoke 和后端单元测试作为必跑自动化基线；真实浏览器回归使用下面的手动清单，不在本阶段引入 Playwright、Puppeteer、Selenium 或 npm 构建链。
 
 ## 环境检查

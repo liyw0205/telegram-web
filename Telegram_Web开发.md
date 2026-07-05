@@ -1,6 +1,6 @@
 # Telegram Web 开发文档
 
-> 当前基线：Phase 37，登录页配置输入提示和前端错误展示边界复核。实际代码版本以 `git log -1 --oneline` 为准。
+> 当前基线：Phase 38，真实浏览器 smoke 条件和登录页提示回归收口。实际代码版本以 `git log -1 --oneline` 为准。
 > 仓库：`telegram-web`
 > 应用形态：Flask + Flask-SocketIO + Telethon 的单进程个人 Telegram Web 管理界面。
 > 前端形态：Jinja 模板 + 原生 JavaScript/CSS，无 npm 构建链。
@@ -480,16 +480,17 @@ rg -n "api\\(|fetch\\(|io\\(|/api/|socket|downloadMedia|prepareMedia|send" stati
 | Phase 35 | 对齐配置校验、JSON、分页、Range 和代理端口错误文案，收敛代理端口错误 |
 | Phase 36 | 重生成主开发文档，按当前代码和文档基线重整架构、边界、验证和阶段制度 |
 | Phase 37 | 对齐登录页配置输入提示、隐藏辅助说明、前端 payload smoke 和后端中文错误 toast 覆盖 |
+| Phase 38 | 复核真实浏览器自动化条件，收口未保存 `api_hash` 运行时提示和 browser smoke 结论 |
 
 ## 15. 后续建议
 
-下一阶段建议继续 Phase 38：真实浏览器手动 smoke 条件和登录页提示回归收口。
+下一阶段建议继续 Phase 39：登录页配置保存后刷新状态和并发边界复核。
 
 优先检查：
 
-- 按 `docs/browser-smoke.md` 复核 `/login` 在桌面和窄屏下的提示、脱敏占位符、toast 和键盘操作。
-- 继续确认真实浏览器自动化条件；如仍缺 Playwright/浏览器命令，不引入新依赖，只更新手动 smoke 结论。
-- 若发现实际浏览器中提示属性、布局或 toast 可见性问题，优先做小范围 CSS/模板修正。
+- `saveLoginConfig()` 保存成功后会触发 `loadLoginPage()` 刷新表单；复核该刷新是否需要显式等待、禁用按钮或状态反馈。
+- 复核保存配置、发送验证码、提交验证码和提交 2FA 的连续点击/失败回退边界。
+- 如发现状态竞态或提示延迟，优先在原生 JS 中做小范围状态控制和 smoke 覆盖。
 
 限制：
 
