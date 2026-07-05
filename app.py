@@ -126,11 +126,21 @@ def parse_proxy(proxy_url):
         raise ValueError("代理地址缺少 host")
     if u.path not in ("", "/") or u.query or u.fragment:
         raise ValueError("代理地址不能包含 path/query/fragment")
-    port = int(u.port or 1080)
-    if port < 1 or port > 65535:
-        raise ValueError("代理端口必须在 1..65535 之间")
+    port = proxy_port_or_default(u)
     proxy_type = socks.SOCKS5 if scheme == "socks5" else socks.SOCKS4
     return (proxy_type, u.hostname, port, True, unquote(u.username) if u.username else None, unquote(u.password) if u.password else None)
+
+
+def proxy_port_or_default(parsed):
+    try:
+        port = parsed.port
+    except ValueError:
+        raise ValueError("代理端口必须在 1..65535 之间")
+    if port is None:
+        port = 1080
+    if port < 1 or port > 65535:
+        raise ValueError("代理端口必须在 1..65535 之间")
+    return port
 
 
 def coerce_int_range(value, default, min_value, max_value, field, strict=True):
@@ -353,7 +363,7 @@ def normalize_proxy_url(value):
         if parsed.password is not None:
             auth += ":" + quote(unquote(parsed.password), safe="")
         auth += "@"
-    port = parsed.port or 1080
+    port = proxy_port_or_default(parsed)
     return f"{parsed.scheme.lower()}://{auth}{parsed.hostname}:{port}"
 
 

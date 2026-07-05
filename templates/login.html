@@ -12,8 +12,8 @@
   <label for="api_hash">api_hash</label><input id="api_hash" autocomplete="off" aria-describedby="apiHashHelp" placeholder="api_hash">
   <p id="apiHashHelp" class="sr-only">已保存时留空会沿用当前 api_hash。</p>
   <label for="phone">手机号</label><input id="phone" autocomplete="tel" placeholder="+8613812345678">
-  <label for="proxy">SOCKS5 代理</label><input id="proxy" autocomplete="off" aria-describedby="proxyHelp" placeholder="socks5://127.0.0.1:7890">
-  <p id="proxyHelp" class="sr-only">已保存代理时留空会沿用当前代理。</p>
+  <label for="proxy">SOCKS4/5 代理</label><input id="proxy" autocomplete="off" aria-describedby="proxyHelp" placeholder="socks5://127.0.0.1:7890">
+  <p id="proxyHelp" class="sr-only">仅支持 socks4:// 或 socks5://，host 必填，端口默认 1080；已保存代理时留空会沿用当前代理。</p>
   <label for="session_type">Session 类型</label>
   <select id="session_type" autocomplete="off">
     <option value="file">.session 文件</option>

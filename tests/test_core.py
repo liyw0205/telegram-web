@@ -31,8 +31,15 @@ class CoreHelpersTest(unittest.TestCase):
         self.assertEqual(parsed[2], 1081)
         self.assertEqual(parsed[4], "user")
         self.assertEqual(parsed[5], "pass")
+        parsed = webapp.parse_proxy("socks4://127.0.0.1")
+        self.assertEqual(parsed[2], 1080)
         with self.assertRaises(ValueError):
             webapp.parse_proxy("http://127.0.0.1:8080")
+        for proxy in ("socks5://127.0.0.1:bad", "socks5://127.0.0.1:0", "socks5://127.0.0.1:65536"):
+            with self.subTest(proxy=proxy):
+                with self.assertRaises(ValueError) as cm:
+                    webapp.parse_proxy(proxy)
+                self.assertEqual(str(cm.exception), "代理端口必须在 1..65535 之间")
 
     def test_resolve_under_rejects_traversal_and_absolute_paths(self):
         inside = webapp.resolve_under(webapp.DOWNLOAD_DIR, "file.txt")
@@ -219,26 +226,27 @@ class CoreHelpersTest(unittest.TestCase):
         self.assertEqual(cfg["proxy"], "socks5://127.0.0.1:1080")
         self.assertEqual(cfg["web_token"], "12345678")
 
-        with self.assertRaises(webapp.ApiError):
-            webapp.normalize_config_patch({"api_id": 0}, webapp.DEFAULT_CONFIG)
-        with self.assertRaises(webapp.ApiError):
-            webapp.normalize_config_patch({"api_hash": "not-a-hash"}, webapp.DEFAULT_CONFIG)
-        with self.assertRaises(webapp.ApiError):
-            webapp.normalize_config_patch({"phone": "abc"}, webapp.DEFAULT_CONFIG)
-        with self.assertRaises(webapp.ApiError):
-            webapp.normalize_config_patch({"proxy": "socks5://127.0.0.1:1080/path"}, webapp.DEFAULT_CONFIG)
-        with self.assertRaises(webapp.ApiError):
-            webapp.normalize_config_patch({"download_threads": 0}, webapp.DEFAULT_CONFIG)
-        with self.assertRaises(webapp.ApiError):
-            webapp.normalize_config_patch({"cache_limit_mb": 64}, webapp.DEFAULT_CONFIG)
-        with self.assertRaises(webapp.ApiError):
-            webapp.normalize_config_patch({"session_type": "bad"}, webapp.DEFAULT_CONFIG)
-        with self.assertRaises(webapp.ApiError):
-            webapp.normalize_config_patch({"session_file": str(ROOT / "outside")}, webapp.DEFAULT_CONFIG)
-        with self.assertRaises(webapp.ApiError):
-            webapp.normalize_config_patch({"web_token": "short"}, webapp.DEFAULT_CONFIG)
-        with self.assertRaises(webapp.ApiError):
-            webapp.normalize_config_patch({"session_type": "string"}, webapp.DEFAULT_CONFIG)
+        cases = [
+            ({"api_id": 0}, "api_id 必须在 1..2147483647 之间"),
+            ({"api_id": "abc"}, "api_id 必须是数字"),
+            ({"api_hash": "not-a-hash"}, "api_hash 必须是 32 位十六进制字符串"),
+            ({"phone": "abc"}, "phone 格式无效"),
+            ({"proxy": "socks5://127.0.0.1:1080/path"}, "代理地址不能包含 path/query/fragment"),
+            ({"proxy": "socks5://127.0.0.1:bad"}, "代理端口必须在 1..65535 之间"),
+            ({"download_threads": 0}, "download_threads 必须在 1..128 之间"),
+            ({"cache_limit_mb": 64}, "cache_limit_mb 必须在 128..10240 之间"),
+            ({"session_type": "bad"}, "session_type 仅支持 file/string"),
+            ({"session_file": str(ROOT / "outside")}, "session_file 只能是 data 目录内的文件名"),
+            ({"session_file": "telegram.txt"}, "session_file 仅支持 .session 后缀"),
+            ({"web_token": "short"}, "web_token 长度必须在 8..256 之间"),
+            ({"web_token": "valid token"}, "web_token 不能包含空白字符"),
+            ({"session_type": "string"}, "session_type=string 需要 string_session"),
+        ]
+        for patch_data, message in cases:
+            with self.subTest(message=message):
+                with self.assertRaises(webapp.ApiError) as cm:
+                    webapp.normalize_config_patch(patch_data, webapp.DEFAULT_CONFIG)
+                self.assertEqual(str(cm.exception), message)
 
     def test_session_file_helpers_keep_files_under_data_dir(self):
         config_path, stored_path = webapp.session_upload_paths("custom.session")
@@ -296,11 +304,13 @@ class FlaskBoundaryTest(unittest.TestCase):
         response = self.client.post("/api/send", data="{", content_type="application/json")
         self.assertEqual(response.status_code, 400)
         self.assertFalse(response.get_json()["success"])
+        self.assertEqual(response.get_json()["error"], "请求体必须是有效 JSON")
 
     def test_missing_json_content_type_returns_400(self):
         response = self.client.post("/api/send", data='{"peer":"x","text":"y"}')
         self.assertEqual(response.status_code, 400)
         self.assertFalse(response.get_json()["success"])
+        self.assertEqual(response.get_json()["error"], "请求体必须是 JSON 对象")
 
     def test_page_routes_render_without_telegram_login(self):
         for path in ("/login", "/chats", "/chat/test-peer", "/downloads", "/diagnostics"):
@@ -427,7 +437,8 @@ class FlaskBoundaryTest(unittest.TestCase):
             '<label for="api_hash">api_hash</label><input id="api_hash" autocomplete="off" aria-describedby="apiHashHelp"',
             'id="apiHashHelp" class="sr-only"',
             '<label for="phone">手机号</label><input id="phone" autocomplete="tel"',
-            '<label for="proxy">SOCKS5 代理</label><input id="proxy" autocomplete="off" aria-describedby="proxyHelp"',
+            '<label for="proxy">SOCKS4/5 代理</label><input id="proxy" autocomplete="off" aria-describedby="proxyHelp"',
+            '仅支持 socks4:// 或 socks5://，host 必填，端口默认 1080；已保存代理时留空会沿用当前代理。',
             '只填写 data 目录内文件名，可带或不带 .session 后缀；已保存时留空会沿用当前 .session 文件。',
             '<label for="string_session">StringSession</label><textarea id="string_session" autocomplete="off" spellcheck="false" aria-describedby="stringSessionHelp"',
             '<label for="web_token">Web Token</label><input id="web_token" type="password" autocomplete="new-password" aria-describedby="webTokenHelp"',
@@ -446,6 +457,7 @@ class FlaskBoundaryTest(unittest.TestCase):
         response = self.client.post("/api/send", json=[])
         self.assertEqual(response.status_code, 400)
         self.assertFalse(response.get_json()["success"])
+        self.assertEqual(response.get_json()["error"], "请求体必须是 JSON 对象")
 
     def test_file_route_serves_inside_download_dir(self):
         response = self.client.get("/download-file/unit-test-download.txt", buffered=True)
@@ -533,9 +545,19 @@ class FlaskBoundaryTest(unittest.TestCase):
                 self.assertEqual([row["name"] for row in data["items"]], ["middle.bin", "old.txt"])
 
     def test_download_files_api_validates_pagination_args(self):
-        response = self.client.get("/api/download-files?limit=0")
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("limit", response.get_json()["error"])
+        cases = [
+            ("/api/dialogs?limit=501", "limit 必须在 1..500 之间"),
+            ("/api/messages?peer=test&limit=201", "limit 必须在 1..200 之间"),
+            ("/api/messages?peer=test&offset_id=-1", "offset_id 必须在 0..9223372036854775807 之间"),
+            ("/api/download-files?limit=0", "limit 必须在 1..100 之间"),
+            ("/api/download-files?offset=100001", "offset 必须在 0..100000 之间"),
+            ("/api/download-files?offset=abc", "offset 必须是数字"),
+        ]
+        for path, message in cases:
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(response.get_json()["error"], message)
 
     def test_internal_api_errors_are_not_exposed(self):
         with patch.object(webapp.tg, "status", new=lambda: object()), patch.object(webapp.tg, "run", side_effect=RuntimeError("secret internal path")):

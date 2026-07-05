@@ -132,6 +132,28 @@ Session 迁移操作：
 - 导出 `.session` 文件前会弹出确认；确认后会创建一次性导出令牌并打开下载链接。
 - 一次性导出令牌有效期为 60 秒，且使用后立即失效。
 
+## 配置校验和 API 参数错误
+
+配置保存和登录启动共用同一组边界：
+
+- `api_id` 必须是 `1..2147483647` 的数字。
+- `api_hash` 必须是 32 位十六进制字符串；留空沿用已保存值。
+- 手机号只接受可选 `+` 加 5 到 20 位数字。
+- 代理只支持 `socks4://` 或 `socks5://`，host 必填，端口默认 1080 且必须在 `1..65535`，不能带 path、query 或 fragment。
+- Session 文件名只接受 `data/` 目录内文件名，可带或不带 `.session` 后缀。
+- `session_type` 只支持 `file` 或 `string`；切到 `string` 时需要已保存或本次提供有效 StringSession。
+- `download_threads` 范围是 `1..128`，`cache_limit_mb` 范围是 `128..10240`。
+- `web_token` 范围是 8 到 256 字符，不能包含空白字符；留空不修改已保存 Token。
+
+JSON API 的 POST 请求必须是 JSON 对象。Content-Type 不匹配、数组或字符串等非对象请求会返回 `请求体必须是 JSON 对象`；JSON 语法错误会返回 `请求体必须是有效 JSON`。
+
+分页和文件访问边界：
+
+- `/api/dialogs?limit=...` 的 `limit` 范围是 `1..500`。
+- `/api/messages?limit=...&offset_id=...` 的 `limit` 范围是 `1..200`，`offset_id` 范围是 `0..9223372036854775807`。
+- `/api/download-files?limit=...&offset=...` 的 `limit` 范围是 `1..100`，`offset` 范围是 `0..100000`。
+- 下载、图片和媒体缓存文件支持单段 `Range: bytes=...`；非法、多段或越界 Range 返回 416 和 `Content-Range: bytes */<size>`；非 `bytes` Range 会被忽略并返回普通 200。
+
 ## 脱敏诊断接口
 
 浏览器可打开只读诊断页：
@@ -266,7 +288,7 @@ grep 'internal api error err-id-here' "$HOME/telegram-web-logs/server.log"
 - API 返回 `需要 Web Token，请先验证`：请求缺少有效 Token；使用 `/auth`、`Authorization` header 或 `X-Web-Telegram-Token` header。
 - `/api/diagnostics` 探测失败：确认服务正在运行；如启用了 Web Token，优先用 `TELEGRAM_WEB_TOKEN` 环境变量启动，或手动通过 header 访问。
 - API 返回 `Telegram 未登录`：先打开 `/login` 完成手机号、验证码和 2FA 登录，或导入 StringSession / `.session`。
-- 代理错误：仅支持 `socks4://` 或 `socks5://`，不能带 path、query 或 fragment。
+- 代理错误：仅支持 `socks4://` 或 `socks5://`，host 必填，端口必须在 `1..65535`，不能带 path、query 或 fragment。
 - 下载页没有历史：只有终态下载/预览任务会写入 `data/task-history.json`，运行中任务不会持久化。
 - 前端提示内部错误并显示错误 ID：在服务端日志中搜索 `internal api error <error_id>`。
 

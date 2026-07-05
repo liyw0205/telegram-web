@@ -99,12 +99,17 @@ TELEGRAM_WEB_HOST=0.0.0.0 TELEGRAM_WEB_PORT=5000 TELEGRAM_WEB_TOKEN=your-strong-
 
 登录页需要填写：
 
-- `api_id`
-- `api_hash`
-- 手机号
-- 代理（可选）
-- 下载线程数
-- 缓存上限（MB）
+- `api_id`：1 到 2147483647 的数字。
+- `api_hash`：32 位十六进制字符串；已保存时留空沿用当前值。
+- 手机号：可带 `+`，数字长度 5 到 20。
+- 代理（可选）：仅支持 `socks4://` 或 `socks5://`，host 必填，端口默认 1080 且必须在 1 到 65535 之间，不能包含 path、query 或 fragment。
+- Session 类型：`file` 或 `string`；选择 `string` 时需要已保存或本次填写有效 StringSession。
+- Session 文件名：只接受 `data/` 目录内文件名，可带或不带 `.session` 后缀。
+- 下载线程数：1 到 128。
+- 缓存上限（MB）：128 到 10240。
+- Web Token：8 到 256 字符，不能包含空白字符；已保存时留空不修改。
+
+JSON API 的 POST 请求必须使用 JSON 对象；Content-Type 不匹配或数组/字符串等非对象请求会返回 `请求体必须是 JSON 对象`，语法错误会返回 `请求体必须是有效 JSON`。分页参数错误会返回字段名和范围，例如 `limit 必须在 1..100 之间`。
 
 ## 目录结构
 
@@ -123,13 +128,15 @@ TELEGRAM_WEB_HOST=0.0.0.0 TELEGRAM_WEB_PORT=5000 TELEGRAM_WEB_TOKEN=your-strong-
 
 - 需要有效的 Telegram API ID / Hash
 - 首次登录需要验证码
-- 使用代理时请确保 SOCKS5 可用
+- 使用代理时请确保 SOCKS4/5 代理可用
 - 会话列表一次加载最近 120 个会话，搜索只在已加载结果中按名称、用户名、peer 或 ID 过滤；没有匹配时显示“没有匹配的会话”
 - 媒体缓存会按上限自动清理
 - 聊天页会优先加载媒体缩略图，不自动下载原文件；点击媒体预览会按需准备缓存，未就绪时显示“媒体正在准备，稍后重试打开”
 - 聊天页媒体下载按钮会创建后台下载任务，可在下载页查看进度，不会在当前页直接保存文件
 - 终态下载/预览任务会记录到 `data/task-history.json`，重启后可继续在下载页看到最近历史
 - 下载页会分页列出 `Download/` 和 `Pictures/` 中已完成文件，并跳过 `.part` 临时文件
+- `/api/dialogs` 的 `limit` 范围为 `1..500`，`/api/messages` 的 `limit` 范围为 `1..200` 且 `offset_id` 范围为 `0..9223372036854775807`，`/api/download-files` 的 `limit` 范围为 `1..100` 且 `offset` 范围为 `0..100000`
+- 下载、图片和媒体缓存文件支持单段 `Range: bytes=...`；非法、多段或越界 Range 返回 416，非 `bytes` Range 会被忽略并按普通 200 响应
 - 暂停和恢复任务会直接执行；取消活跃任务或移除终态记录前会弹出确认，移除记录不会删除已下载文件
 - `data/`、`Download/`、`Pictures/` 和 `.session` 文件是本地运行数据，不要提交到 Git
 - 当前登录页开放手机号登录、验证码、2FA、StringSession 导入导出和 `.session` 文件导入导出

@@ -83,9 +83,19 @@ data/uploads/
 配置加载规则：
 
 1. `load_config()` 从 `data/config.json` 读取配置，缺失时写入默认配置。
-2. `api_config()` 只允许更新白名单字段：`api_id`、`api_hash`、`phone`、`proxy`、`session_type`、`session_file`、`string_session`、`download_threads`、`cache_limit_mb`。
+2. `api_config()` 只允许更新白名单字段：`api_id`、`api_hash`、`phone`、`proxy`、`session_type`、`session_file`、`string_session`、`download_threads`、`cache_limit_mb`、`web_token`。
 3. `download_threads` 被限制在 `1..128`，`cache_limit_mb` 被限制在 `128..10240`。
 4. 修改配置后调用 `tg.reload_config()`，同时刷新下载线程池和媒体缓存清理。
+
+配置和 API 参数错误边界：
+
+- `api_id` 范围为 `1..2147483647`；`api_hash` 必须是 32 位十六进制字符串；手机号只接受可选 `+` 加 5 到 20 位数字。
+- 代理只支持 `socks4://` 或 `socks5://`，host 必填，端口默认 1080 且范围为 `1..65535`，不能带 path、query 或 fragment。
+- Session 文件名只接受 `data/` 目录内文件名，可带或不带 `.session` 后缀；`session_type` 只支持 `file/string`。
+- Web Token 长度为 8 到 256 字符，不能包含空白字符。
+- JSON POST 必须是 JSON 对象；非 JSON 对象和 JSON 语法错误返回 400。
+- `/api/dialogs` 的 `limit` 范围为 `1..500`；`/api/messages` 的 `limit` 范围为 `1..200`，`offset_id` 范围为 `0..9223372036854775807`；`/api/download-files` 的 `limit` 范围为 `1..100`，`offset` 范围为 `0..100000`。
+- 文件访问只支持单段 `Range: bytes=...`；非法、多段或越界 Range 返回 416，非 `bytes` Range 按普通请求处理。
 
 ## 功能入口
 
@@ -522,3 +532,5 @@ rg -n "api\\(|fetch\\(|io\\(|/api/|socket|downloadMedia|prepareMedia|send" stati
 2026-07-05：Phase 33 对齐会话列表搜索字段、无匹配空状态、诊断摘要端口和运行端口文案，补充 README、runbook、浏览器 smoke 与前端/后端测试断言；未改会话加载、诊断采集、脱敏、鉴权或 API 行为。
 
 2026-07-05：Phase 34 对齐顶部 Telegram 状态、主导航当前项、Web Token 验证页、401 提示和错误 ID 复制提示文案，补充 README、runbook、浏览器 smoke 与前端/后端测试断言；未改鉴权判断、Socket.IO、错误包装结构或导航目标。
+
+2026-07-05：Phase 35 对齐配置校验、JSON 请求、分页参数、Range 请求和代理端口错误文案，修正代理端口非法时的中文错误收敛，并同步 README、runbook、浏览器 smoke 与后端测试断言；未改配置规则、分页逻辑、Range 策略、鉴权逻辑或 Telethon 行为。
