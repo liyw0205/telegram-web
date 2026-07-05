@@ -7,6 +7,8 @@ let olderMessagesLoading = false;
 let olderMessagesCurrentPromise = null;
 let textSendCurrentPromise = null;
 let fileSendCurrentPromise = null;
+const mediaPreparePromises = new Map();
+const mediaDownloadPromises = new Map();
 let downloadsTimer = null;
 let downloadFilesOffset = 0;
 let downloadFilesHasMore = false;
@@ -808,12 +810,26 @@ function renderMediaPreviewNode(url, mime){
   return `<div class="media-file-thumb">📄 文件</div>`;
 }
 async function openMediaViewerByMessage(msgId){
-  const d = await api("/api/media/prepare", { method:"POST", body: JSON.stringify({ peer: CURRENT_PEER, msg_id: msgId }) });
-  if (!d.ready) {
-    toast("媒体正在准备，稍后重试打开");
-    return;
+  if (mediaPreparePromises.has(msgId)) {
+    toast("媒体正在准备，请稍候");
+    return mediaPreparePromises.get(msgId);
   }
-  openGallery([{ msgId, url: d.url, mime: d.mime || "", label: `媒体 #${msgId}` }], 0);
+  const current = (async () => {
+    try{
+      const d = await api("/api/media/prepare", { method:"POST", body: JSON.stringify({ peer: CURRENT_PEER, msg_id: msgId }) });
+      if (!d.ready) {
+        toast("媒体正在准备，稍后重试打开");
+        return;
+      }
+      openGallery([{ msgId, url: d.url, mime: d.mime || "", label: `媒体 #${msgId}` }], 0);
+    } catch(e){ toast(e.message); }
+  })();
+  mediaPreparePromises.set(msgId, current);
+  try {
+    return await current;
+  } finally {
+    if (mediaPreparePromises.get(msgId) === current) mediaPreparePromises.delete(msgId);
+  }
 }
 
 function bindGroupCellClicks(clusterId, galleryItems){
@@ -981,10 +997,35 @@ async function sendFile(){
 /* 下载 */
 async function downloadMedia(msgId){
   if (!CURRENT_PEER) return;
-  try{
-    await api("/api/download-media", { method:"POST", body: JSON.stringify({ peer: CURRENT_PEER, msg_id: msgId }) });
-    toast("下载任务已创建，可在下载页查看进度");
-  } catch(e){ toast(e.message); }
+  if (mediaDownloadPromises.has(msgId)) {
+    toast("媒体下载任务正在创建，请稍候");
+    return mediaDownloadPromises.get(msgId);
+  }
+  const button = $("viewerDownload");
+  const currentGalleryItem = GALLERY_ITEMS[GALLERY_INDEX];
+  const shouldMarkViewerButton = currentGalleryItem && Number(currentGalleryItem.msgId) === Number(msgId);
+  const current = (async () => {
+    if (shouldMarkViewerButton) {
+      setAriaBusy(button, true);
+      if (button && typeof button.setAttribute === "function") button.setAttribute("aria-disabled", "true");
+    }
+    try{
+      await api("/api/download-media", { method:"POST", body: JSON.stringify({ peer: CURRENT_PEER, msg_id: msgId }) });
+      toast("下载任务已创建，可在下载页查看进度");
+    } catch(e){ toast(e.message); }
+    finally {
+      if (shouldMarkViewerButton) {
+        setAriaBusy(button, false);
+        if (button && typeof button.setAttribute === "function") button.setAttribute("aria-disabled", "false");
+      }
+    }
+  })();
+  mediaDownloadPromises.set(msgId, current);
+  try {
+    return await current;
+  } finally {
+    if (mediaDownloadPromises.get(msgId) === current) mediaDownloadPromises.delete(msgId);
+  }
 }
 async function waitForDownloadTasksIdle(){
   if (downloadTasksCurrentPromise) await downloadTasksCurrentPromise.catch(() => {});

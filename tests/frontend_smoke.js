@@ -582,6 +582,109 @@ async function testMediaPrepareViewerAndDownloadTaskCopy() {
   assert(harness.calls.toast.includes("下载任务已创建，可在下载页查看进度"));
 }
 
+async function testMediaPrepareDuplicateClickReusesRequest() {
+  let releasePrepare;
+  const harness = createHarness({
+    routes: {
+      "/api/messages": [],
+      "/api/media/prepare": () => new Promise((resolve) => {
+        releasePrepare = () => resolve({ ready: true, url: "/media-cache/item.jpg", mime: "image/jpeg" });
+      }),
+    },
+  });
+
+  await harness.context.initSingleChatPage("peer-1");
+  const firstOpen = harness.context.openMediaViewerByMessage(42);
+  await Promise.resolve();
+  const duplicateOpen = harness.context.openMediaViewerByMessage(42);
+  await Promise.resolve();
+
+  assert.strictEqual(harness.calls.fetch.filter((call) => call.path === "/api/media/prepare").length, 1);
+  assert(harness.calls.toast.includes("媒体正在准备，请稍候"));
+
+  releasePrepare();
+  await Promise.all([firstOpen, duplicateOpen]);
+
+  assert(harness.elements.get("mediaViewer").classList.contains("show"));
+  assert.strictEqual(textOf(harness, "viewerTitle"), "媒体 #42");
+}
+
+async function testMediaPrepareFailureCanRetryWithoutOpeningViewer() {
+  let prepareCount = 0;
+  const harness = createHarness({
+    routes: {
+      "/api/messages": [],
+      "/api/media/prepare": () => {
+        prepareCount += 1;
+        if (prepareCount === 1) return apiFailure("媒体准备失败", 500);
+        return { ready: true, url: "/media-cache/retry.jpg", mime: "image/jpeg" };
+      },
+    },
+  });
+
+  await harness.context.initSingleChatPage("peer-1");
+  await harness.context.openMediaViewerByMessage(42);
+
+  assert(harness.calls.toast.includes("媒体准备失败"));
+  assert(!harness.elements.get("mediaViewer").classList.contains("show"));
+
+  await harness.context.openMediaViewerByMessage(42);
+
+  assert.strictEqual(prepareCount, 2);
+  assert(harness.elements.get("mediaViewer").classList.contains("show"));
+  assert.strictEqual(textOf(harness, "viewerTitle"), "媒体 #42");
+}
+
+async function testMediaDownloadDuplicateAndFailureRestoreViewerState() {
+  let releaseDownload;
+  let downloadCount = 0;
+  const harness = createHarness({
+    routes: {
+      "/api/messages": [],
+      "/api/download-media": () => {
+        downloadCount += 1;
+        if (downloadCount === 1) {
+          return new Promise((resolve) => {
+            releaseDownload = () => resolve(apiFailure("下载任务创建失败", 500));
+          });
+        }
+        return { task_id: "download-2" };
+      },
+    },
+  });
+
+  await harness.context.initSingleChatPage("peer-1");
+  harness.context.openGallery([
+    { msgId: 42, url: "/media-cache/item.jpg", mime: "image/jpeg", label: "媒体 #42" },
+  ], 0);
+
+  const firstDownload = harness.context.downloadMedia(42);
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.strictEqual(harness.elements.get("viewerDownload").getAttribute("aria-busy"), "true");
+  assert.strictEqual(harness.elements.get("viewerDownload").getAttribute("aria-disabled"), "true");
+
+  const duplicateDownload = harness.context.downloadMedia(42);
+  await Promise.resolve();
+
+  assert.strictEqual(harness.calls.fetch.filter((call) => call.path === "/api/download-media").length, 1);
+  assert(harness.calls.toast.includes("媒体下载任务正在创建，请稍候"));
+
+  releaseDownload();
+  await Promise.all([firstDownload, duplicateDownload]);
+
+  assert(harness.calls.toast.includes("下载任务创建失败"));
+  assert.strictEqual(harness.elements.get("viewerDownload").getAttribute("aria-busy"), "false");
+  assert.strictEqual(harness.elements.get("viewerDownload").getAttribute("aria-disabled"), "false");
+  assert(harness.elements.get("mediaViewer").classList.contains("show"));
+
+  await harness.context.downloadMedia(42);
+
+  assert.strictEqual(downloadCount, 2);
+  assert(harness.calls.toast.includes("下载任务已创建，可在下载页查看进度"));
+}
+
 async function testDialogListRendersAccessibleItemsAndBusyState() {
   const harness = createHarness({
     routes: {
@@ -1474,6 +1577,9 @@ const TEST_GROUPS = [
       testChatFileSendBusyKeepsSelectionOnFailure,
       testChatRefreshAndOlderLoadsAreSerialized,
       testMediaPrepareViewerAndDownloadTaskCopy,
+      testMediaPrepareDuplicateClickReusesRequest,
+      testMediaPrepareFailureCanRetryWithoutOpeningViewer,
+      testMediaDownloadDuplicateAndFailureRestoreViewerState,
     ],
   },
   {
