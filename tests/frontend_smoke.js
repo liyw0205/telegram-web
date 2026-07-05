@@ -26,6 +26,7 @@ const LOGIN_ELEMENT_IDS = [
   "session_type",
   "session_file",
   "string_session",
+  "sessionFileInput",
   "download_threads",
   "cache_limit_mb",
   "web_token",
@@ -805,6 +806,152 @@ async function testStringExportRequestsOneTimeToken() {
   assert.deepStrictEqual(calls.clipboard, ["exported-string-session"]);
 }
 
+async function testStringSessionImportWaitsForConfigAndStatusRefresh() {
+  const harness = createHarness({
+    routes: {
+      "/api/session/string": { imported: true },
+      "/api/config": {
+        api_id: 456,
+        api_hash_saved: true,
+        phone: "+8613700000000",
+        proxy: "",
+        proxy_redacted: false,
+        session_type: "string",
+        session_file_saved: false,
+        string_session_saved: true,
+        download_threads: 6,
+        cache_limit_mb: 2048,
+        web_token_saved: false,
+      },
+      "/api/status": {
+        connected: true,
+        authorized: true,
+        me: { username: "alice" },
+      },
+    },
+  });
+
+  harness.elements.get("string_session").value = "imported-string-session";
+  const action = harness.context.importStringSession();
+  assert.strictEqual(textOf(harness, "confirmMessage"), "确认导入 StringSession？当前客户端会重置并切换到导入的会话。");
+  clickElement(harness, "confirmOk");
+  await action;
+
+  assert.deepStrictEqual(harness.calls.fetch.map((call) => call.path), [
+    "/api/session/string",
+    "/api/config",
+    "/api/status",
+  ]);
+  assert.deepStrictEqual(JSON.parse(harness.calls.fetch[0].options.body), { string_session: "imported-string-session" });
+  assert.strictEqual(harness.elements.get("string_session").value, "");
+  assert.strictEqual(harness.elements.get("string_session").placeholder, "已保存，留空沿用当前 StringSession");
+  assert.strictEqual(textOf(harness, "topStatus"), "Telegram 已登录：alice");
+  assert(harness.calls.toast.includes("StringSession 已导入"));
+}
+
+async function testSessionActionsAreSerializedWhileExportPending() {
+  let releaseToken;
+  let tokenRequests = 0;
+  const harness = createHarness({
+    routes: {
+      "/api/session/export-token": (_path, options = {}) => {
+        tokenRequests += 1;
+        return new Promise((resolve) => {
+          releaseToken = () => resolve({ export_token: JSON.parse(options.body || "{}").kind + "-token" });
+        });
+      },
+      "/api/session/string": { string_session: "exported-string-session" },
+    },
+  });
+
+  const exportAction = harness.context.exportStringSession();
+  clickElement(harness, "confirmOk");
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.strictEqual(tokenRequests, 1);
+  await harness.context.exportSessionFile();
+
+  assert.strictEqual(tokenRequests, 1);
+  assert(harness.calls.toast.includes("StringSession 正在导出，请稍候"));
+
+  releaseToken();
+  await exportAction;
+
+  assert.strictEqual(harness.elements.get("string_session").value, "exported-string-session");
+  assert.deepStrictEqual(harness.calls.fetch.map((call) => call.path), [
+    "/api/session/export-token",
+    "/api/session/string?export_token=string-token",
+  ]);
+}
+
+async function testSessionImportFailureReleasesBusyState() {
+  const harness = createHarness({
+    search: "?token=web-token",
+    routes: {
+      "/api/session/string": apiFailure("StringSession 无效", 400),
+    },
+  });
+
+  harness.elements.get("string_session").value = "bad-string-session";
+  const importAction = harness.context.importStringSession();
+  clickElement(harness, "confirmOk");
+  await importAction;
+
+  assert(harness.calls.toast.includes("StringSession 无效"));
+
+  const exportAction = harness.context.exportSessionFile();
+  clickElement(harness, "confirmOk");
+  await exportAction;
+
+  assert.strictEqual(harness.calls.fetch[0].path, "/api/session/string");
+  assert.strictEqual(harness.calls.fetch[1].path, "/api/session/export-token");
+  assert.strictEqual(harness.calls.open[0].url, "/api/session/file?export_token=file-token&token=web-token");
+}
+
+async function testSessionFileImportWaitsForConfigAndStatusRefresh() {
+  const file = { name: "telegram.session" };
+  const harness = createHarness({
+    routes: {
+      "/api/session/file": { imported: true },
+      "/api/config": {
+        api_id: 789,
+        api_hash_saved: true,
+        phone: "+8613600000000",
+        proxy: "",
+        proxy_redacted: false,
+        session_type: "file",
+        session_file_saved: true,
+        string_session_saved: false,
+        download_threads: 8,
+        cache_limit_mb: 1024,
+        web_token_saved: false,
+      },
+      "/api/status": {
+        connected: true,
+        authorized: false,
+      },
+    },
+  });
+
+  harness.elements.get("sessionFileInput").files = [file];
+  const action = harness.context.importSessionFile();
+  assert.strictEqual(textOf(harness, "confirmMessage"), "确认导入 .session 文件？当前客户端会重置并切换到导入的会话。");
+  clickElement(harness, "confirmOk");
+  await action;
+
+  assert.deepStrictEqual(harness.calls.fetch.map((call) => call.path), [
+    "/api/session/file",
+    "/api/config",
+    "/api/status",
+  ]);
+  assert.deepStrictEqual(harness.calls.fetch[0].options.body.fields, [["file", file]]);
+  assert.strictEqual(harness.elements.get("sessionFileInput").value, "");
+  assert.strictEqual(harness.elements.get("session_file").placeholder, "已保存，留空沿用当前 .session 文件");
+  assert.strictEqual(textOf(harness, "topStatus"), "Telegram 已连接，未授权");
+  assert(harness.calls.toast.includes(".session 文件已导入"));
+}
+
 async function testFileExportOpensTokenizedDownloadUrl() {
   const { context, elements, calls } = createHarness({ search: "?token=web-token" });
   const action = context.exportSessionFile();
@@ -1073,6 +1220,10 @@ const TEST_GROUPS = [
     tests: [
       testCancelingStringExportDoesNotRequestToken,
       testStringExportRequestsOneTimeToken,
+      testStringSessionImportWaitsForConfigAndStatusRefresh,
+      testSessionActionsAreSerializedWhileExportPending,
+      testSessionImportFailureReleasesBusyState,
+      testSessionFileImportWaitsForConfigAndStatusRefresh,
       testFileExportOpensTokenizedDownloadUrl,
       testTaskDeleteConfirmationControlsRequest,
     ],

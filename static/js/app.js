@@ -16,7 +16,7 @@ const SHOW_META = false;
 let pendingConfirm = null;
 let confirmDialogBound = false;
 let confirmLastFocus = null;
-let loginActionBusyMessage = "";
+let loginPageActionBusyMessage = "";
 
 const THUMB_CACHE = new Map(); // key: `${peer}:${msgId}` -> url|null
 const URL_TOKEN = new URLSearchParams(location.search).get("token") || "";
@@ -157,16 +157,16 @@ function setAriaBusy(target, busy){
   const el = typeof target === "string" ? $(target) : target;
   if (el && typeof el.setAttribute === "function") el.setAttribute("aria-busy", busy ? "true" : "false");
 }
-async function withLoginAction(busyMessage, action){
-  if (loginActionBusyMessage) {
-    toast(loginActionBusyMessage);
+async function withLoginPageAction(busyMessage, action){
+  if (loginPageActionBusyMessage) {
+    toast(loginPageActionBusyMessage);
     return null;
   }
-  loginActionBusyMessage = busyMessage;
+  loginPageActionBusyMessage = busyMessage;
   try {
     return await action();
   } finally {
-    loginActionBusyMessage = "";
+    loginPageActionBusyMessage = "";
   }
 }
 function setDiagnosticsState(state){
@@ -330,7 +330,7 @@ function loginConfigPayload(includeWebToken = false){
   return payload;
 }
 async function saveLoginConfig(){
-  return withLoginAction("配置正在保存，请稍候", async () => {
+  return withLoginPageAction("配置正在保存，请稍候", async () => {
     try{
       await api("/api/config", { method:"POST", body: JSON.stringify(loginConfigPayload(true)) });
       await loadLoginPage();
@@ -339,7 +339,7 @@ async function saveLoginConfig(){
   });
 }
 async function startLogin(){
-  return withLoginAction("验证码正在发送，请稍候", async () => {
+  return withLoginPageAction("验证码正在发送，请稍候", async () => {
     try{
       const d = await api("/api/login/start", {
         method:"POST",
@@ -350,7 +350,7 @@ async function startLogin(){
   });
 }
 async function submitCode(){
-  return withLoginAction("验证码正在提交，请稍候", async () => {
+  return withLoginPageAction("验证码正在提交，请稍候", async () => {
     const code = prompt("请输入验证码"); if (!code) return;
     try{
       const d = await api("/api/login/code", { method:"POST", body: JSON.stringify({ code }) });
@@ -360,14 +360,14 @@ async function submitCode(){
   });
 }
 async function submitPassword(){
-  return withLoginAction("2FA 正在提交，请稍候", async () => {
+  return withLoginPageAction("2FA 正在提交，请稍候", async () => {
     const password = prompt("请输入两步验证密码"); if (!password) return;
     try{ await api("/api/login/password", { method:"POST", body: JSON.stringify({ password }) }); toast("登录成功"); refreshStatus(); }
     catch(e){ toast(e.message); }
   });
 }
 async function logoutTelegram(){
-  return withLoginAction("正在处理退出登录，请稍候", async () => {
+  return withLoginPageAction("正在处理退出登录，请稍候", async () => {
     if (!(await confirmSensitive("确认退出 Telegram 登录？这会断开当前账号会话。"))) return;
     try{ await api("/api/logout", { method:"POST", body:"{}" }); toast("已退出登录"); refreshStatus(); }
     catch(e){ toast(e.message); }
@@ -376,45 +376,55 @@ async function logoutTelegram(){
 async function importStringSession(){
   const value = $("string_session")?.value.trim();
   if (!value) return toast("请先粘贴 StringSession");
-  if (!(await confirmSensitive("确认导入 StringSession？当前客户端会重置并切换到导入的会话。"))) return;
-  try{
-    await api("/api/session/string", { method:"POST", body: JSON.stringify({ string_session: value }) });
-    $("string_session").value = "";
-    toast("StringSession 已导入");
-    loadLoginPage(); refreshStatus();
-  } catch(e){ toast(e.message); }
+  return withLoginPageAction("StringSession 正在导入，请稍候", async () => {
+    if (!(await confirmSensitive("确认导入 StringSession？当前客户端会重置并切换到导入的会话。"))) return;
+    try{
+      await api("/api/session/string", { method:"POST", body: JSON.stringify({ string_session: value }) });
+      $("string_session").value = "";
+      await loadLoginPage();
+      await refreshStatus();
+      toast("StringSession 已导入");
+    } catch(e){ toast(e.message); }
+  });
 }
 async function exportStringSession(){
-  if (!(await confirmSensitive("确认导出 StringSession？导出的文本可直接登录此 Telegram 账号。"))) return;
-  try{
-    const token = await createSessionExportToken("string");
-    const data = await api(withQuery("/api/session/string", { export_token: token.export_token }));
-    const value = data.string_session || "";
-    if (!value) return toast("当前没有 StringSession");
-    $("string_session").value = value;
-    if (navigator.clipboard) await navigator.clipboard.writeText(value).catch(() => {});
-    toast("StringSession 已填入文本框");
-  } catch(e){ toast(e.message); }
+  return withLoginPageAction("StringSession 正在导出，请稍候", async () => {
+    if (!(await confirmSensitive("确认导出 StringSession？导出的文本可直接登录此 Telegram 账号。"))) return;
+    try{
+      const token = await createSessionExportToken("string");
+      const data = await api(withQuery("/api/session/string", { export_token: token.export_token }));
+      const value = data.string_session || "";
+      if (!value) return toast("当前没有 StringSession");
+      $("string_session").value = value;
+      if (navigator.clipboard) await navigator.clipboard.writeText(value).catch(() => {});
+      toast("StringSession 已填入文本框");
+    } catch(e){ toast(e.message); }
+  });
 }
 async function importSessionFile(){
   const file = $("sessionFileInput")?.files?.[0];
   if (!file) return toast("请选择 .session 文件");
-  if (!(await confirmSensitive("确认导入 .session 文件？当前客户端会重置并切换到导入的会话。"))) return;
-  const fd = new FormData();
-  fd.append("file", file);
-  try{
-    await api("/api/session/file", { method:"POST", body: fd });
-    $("sessionFileInput").value = "";
-    toast(".session 文件已导入");
-    loadLoginPage(); refreshStatus();
-  } catch(e){ toast(e.message); }
+  return withLoginPageAction(".session 文件正在导入，请稍候", async () => {
+    if (!(await confirmSensitive("确认导入 .session 文件？当前客户端会重置并切换到导入的会话。"))) return;
+    const fd = new FormData();
+    fd.append("file", file);
+    try{
+      await api("/api/session/file", { method:"POST", body: fd });
+      $("sessionFileInput").value = "";
+      await loadLoginPage();
+      await refreshStatus();
+      toast(".session 文件已导入");
+    } catch(e){ toast(e.message); }
+  });
 }
 async function exportSessionFile(){
-  if (!(await confirmSensitive("确认导出 .session 文件？该文件可直接登录此 Telegram 账号。"))) return;
-  try{
-    const token = await createSessionExportToken("file");
-    window.open(withQuery("/api/session/file", { export_token: token.export_token, token: URL_TOKEN }), "_blank", "noopener");
-  } catch(e){ toast(e.message); }
+  return withLoginPageAction(".session 文件正在导出，请稍候", async () => {
+    if (!(await confirmSensitive("确认导出 .session 文件？该文件可直接登录此 Telegram 账号。"))) return;
+    try{
+      const token = await createSessionExportToken("file");
+      window.open(withQuery("/api/session/file", { export_token: token.export_token, token: URL_TOKEN }), "_blank", "noopener");
+    } catch(e){ toast(e.message); }
+  });
 }
 
 /* 会话 */
