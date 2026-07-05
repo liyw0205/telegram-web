@@ -1,64 +1,60 @@
-# Telegram Web 开发方案
+# Telegram Web 开发文档
 
-> **当前产品基线**：Web Telegram，Flask + Flask-SocketIO + Telethon 的个人 Telegram Web 管理与聊天界面。
-> **仓库**：`telegram-web`，当前 HEAD 以 `git log -1 --oneline` 为准。
-> **本文**：`telegram-web/Telegram_Web开发.md`，长期开发方案和阶段会话协作规则。
-> **运行形态**：单进程 Python Web 服务，后端负责 Telegram 客户端、下载任务、媒体缓存和 Socket.IO 推送；前端为 Jinja 模板 + 原生 JavaScript/CSS。
-> **最低回归规则**：每阶段至少跑 `PYTHONPYCACHEPREFIX="${TMPDIR:-$HOME/.cache}/telegram-web-pycache" python -m py_compile app.py` 和 `git diff --check`；涉及行为修改时补充对应手动或自动验证。
+> 当前基线：Phase 36，文档重生成。实际代码版本以 `git log -1 --oneline` 为准。
+> 仓库：`telegram-web`
+> 应用形态：Flask + Flask-SocketIO + Telethon 的单进程个人 Telegram Web 管理界面。
+> 前端形态：Jinja 模板 + 原生 JavaScript/CSS，无 npm 构建链。
 
-## 当前结论
+## 1. 项目定位
 
-本项目当前定位是 **个人 Telegram 数据浏览、聊天、媒体预览和下载管理工具**。它不是 Telegram Bot，也不是独立前端 SPA；核心入口是 `app.py` 中的 Flask 路由和 `TelegramService` 封装的 Telethon 客户端。
+本项目是个人 Telegram 数据浏览、聊天、媒体预览、下载任务管理和会话迁移工具。它不是 Telegram Bot，也不是独立 SPA。后端负责 Telegram 客户端、任务状态、媒体缓存、文件 Range 响应和 Socket.IO 推送；前端负责页面渲染、交互状态、可访问性语义和错误提示。
 
-一句话目标：在不泄露 Telegram API 凭据和本地会话数据的前提下，持续提高登录、会话浏览、消息收发、媒体预览、断点/任务下载、配置持久化和移动端 Web 体验的稳定性。
+目标是在不泄露 Telegram API 凭据、本地 session、代理凭据、Web Token 和运行数据的前提下，提高以下能力：
 
-## 当前主线
+- 登录、验证码、2FA、StringSession 和 `.session` 文件流程可恢复、可解释。
+- 会话列表、消息流、媒体缩略图、媒体查看器和发送文件流程稳定。
+- 下载任务、终态历史、分页文件列表、Range 响应和缓存清理边界清晰。
+- 移动端页面、键盘交互、确认弹窗、错误 ID 和诊断页可持续回归。
+- 每个阶段都有进度文档、交接文档、验证结果、Git 提交和远端推送。
 
-后续开发围绕四个问题展开：
+## 2. 固定边界
 
-| 问题 | 目标 |
-|------|------|
-| 登录和会话怎么更稳？ | API ID/Hash、手机号、代理、2FA、StringSession 和 `.session` 文件流程可恢复、可解释 |
-| 媒体怎么更可靠？ | 缩略图、预览、下载任务、Range 响应、缓存清理和大文件处理边界清晰 |
-| 前端怎么更顺手？ | 会话列表、聊天流、图库、发送文件、任务管理和移动端布局减少误操作 |
-| 开发怎么可续接？ | 每阶段独立目标、主代理+子代理协作、进度/交接文档、验证结果和 Git 提交可追溯 |
+- 不提交真实 Telegram 凭据和会话：`api_id`、`api_hash`、手机号、代理账号、StringSession、`.session`、Cookie、Web Token 和导出令牌只能存在于运行配置或本地运行数据中。
+- 不提交运行数据：`data/`、`Download/`、`Pictures/`、`data/media-cache/`、`data/uploads/`、`.session`、`.part` 和任务历史 JSON 都属于运行态数据。
+- 不扩大到无关目录或账号：默认只处理本仓库、运行进程、本项目运行目录和用户明确提供的测试数据。
+- 不绕过 Telegram 授权：登录、验证码、2FA、退出登录、StringSession 导入导出和 `.session` 导入导出必须保持显式操作和可审计。
+- 不无计划引入前端构建链：当前保持 Jinja + 原生 JS/CSS；只有阶段目标明确、收益足够、验证和部署方式同步更新时才引入 npm/Vite/React 等。
+- 不把诊断页变成 secret 查看器：诊断页和 `/api/diagnostics` 只展示布尔、枚举和数值状态，不展示原始 secret、Token、本地绝对路径或代理原文。
+- 阶段结束必须提交并推送：完成开发、验证、进度文档和交接文档后，非交互式提交，并使用 SSH 推送到 `origin/main`。
 
-## 固定边界
-
-- **不提交真实 Telegram 凭据和会话**：`api_id`、`api_hash`、手机号、代理账号、StringSession、`.session`、Cookie、Token 只能存在于运行配置或本地数据目录，不能进入仓库文档示例以外的真实内容。
-- **不提交运行数据**：`data/`、`Download/`、`Pictures/`、`media-cache/`、`uploads/` 和临时下载文件属于运行态数据。
-- **不扩大到无关账户或目录**：开发默认只处理本仓库、运行进程、本项目创建的数据目录和用户明确提供的测试数据。
-- **不绕过 Telegram 授权流程**：登录、验证码、2FA、退出登录和 session 导入导出必须保持可审计，不写隐藏式自动登录逻辑。
-- **不把前端无计划改成大型构建链**：当前是模板 + 原生 JS/CSS；只有在阶段目标明确、收益足够、验证和部署方式同步更新时，才引入 npm/Vite/React 等构建链。
-- **优先复用成熟开源方案**：如果 GitHub、npm 或 PyPI 上存在维护活跃、许可证兼容、集成成本合理的成熟方案，优先依赖或适配，不从头实现同类基础能力。
-- **每阶段都要可回滚**：小步提交，避免无关重构；生成文件、缓存和凭据不进入提交。
-- **阶段结束必须提交 Git**：每个阶段完成后更新进度和交接文档，跑验证，创建一次非交互式 Git 提交。
-
-## 工作区结构
+## 3. 工作区结构
 
 | 路径 | 作用 |
 |------|------|
-| `app.py` | Flask 应用、Telethon 客户端、配置、任务队列、下载和媒体缓存逻辑 |
-| `requirements.txt` | Python 运行依赖：`flask`、`flask-socketio`、`telethon`、`pysocks`、`python-socketio` |
-| `templates/base.html` | 页面基础布局、顶部状态、导航和脚本入口 |
-| `templates/login.html` | Telegram API 配置、手机号登录、验证码和 2FA 操作入口 |
-| `templates/chats.html` | 会话列表页面 |
-| `templates/chat.html` | 单会话聊天页面、消息流和输入区容器 |
-| `templates/downloads.html` | 下载任务和已下载文件页面 |
-| `templates/diagnostics.html` | 只读脱敏诊断页面 |
-| `static/js/app.js` | 前端 API 封装、Socket.IO、会话/消息/媒体/下载交互 |
-| `static/css/app.css` | 全站样式和移动端布局 |
-| `tests/frontend_smoke.js` | 纯 Node 前端行为 smoke，按确认弹窗、媒体查看器、聊天消息、会话列表、登录页/API、session/任务确认、下载页和诊断页分组，在 mock 浏览器环境验证自定义敏感确认、键盘焦点循环、媒体查看器键盘交互和焦点循环、聊天消息状态、会话列表状态、导出令牌、API 错误 ID 展示和复制尝试、登录页配置、下载页状态和诊断页脱敏渲染 |
-| `docs/browser-smoke.md` | 真实浏览器手动 smoke 验证清单和后续 Playwright 引入边界 |
-| `scripts/check-browser-smoke-env.sh` | 检查当前 shell 是否具备浏览器自动化 smoke 条件，不安装依赖 |
-| `docs/runtime-runbook.md` | 启动、访问、日志观察、Web Token 和常见故障排查清单 |
-| `scripts/diagnose-runtime.sh` | 本机运行预检脚本，不读取运行配置和凭据 |
-| `docs/progress/` | 每阶段开发进度文档 |
-| `docs/handoff/` | 每阶段会话交接文档，`LATEST.md` 指向/承载最新交接内容 |
+| `app.py` | Flask 应用、Telethon 服务、配置校验、鉴权、任务队列、媒体缓存、文件服务和 Socket.IO |
+| `requirements.txt` | Python 依赖：`flask`、`flask-socketio`、`telethon`、`pysocks`、`python-socketio` |
+| `templates/base.html` | 全局布局、顶部状态、底部主导航、toast、确认弹窗和脚本入口 |
+| `templates/auth.html` | Web Token 验证页 |
+| `templates/login.html` | Telegram API 配置、手机号登录、验证码、2FA、StringSession 和 `.session` 迁移 |
+| `templates/chats.html` | 会话列表页 |
+| `templates/chat.html` | 单会话消息页、消息列表、发送区和媒体查看器 |
+| `templates/downloads.html` | 下载任务和已下载文件页 |
+| `templates/diagnostics.html` | 只读脱敏诊断页 |
+| `static/js/app.js` | 前端 API 封装、Socket.IO、状态刷新、登录、会话、消息、媒体、下载和诊断交互 |
+| `static/css/app.css` | 全站样式、移动端布局、卡片、弹窗、媒体查看器和下载页样式 |
+| `tests/test_core.py` | 标准库 `unittest` 后端和模板静态回归 |
+| `tests/frontend_smoke.js` | 纯 Node mock 浏览器 smoke，覆盖确认弹窗、媒体查看器、登录/API、会话、聊天、下载和诊断 |
+| `scripts/run-termux.sh` | Termux/本机启动脚本 |
+| `scripts/diagnose-runtime.sh` | 运行环境预检和可选 `/api/diagnostics` HTTP 探测 |
+| `scripts/check-browser-smoke-env.sh` | 检查本机是否具备浏览器自动化 smoke 条件，不安装依赖 |
+| `docs/runtime-runbook.md` | 启动、访问、Web Token、日志、诊断、配置边界、备份恢复和常见故障 |
+| `docs/browser-smoke.md` | 手动真实浏览器 smoke 清单和后续 Playwright 引入边界 |
+| `docs/progress/` | 每阶段进度记录 |
+| `docs/handoff/` | 每阶段交接记录，`LATEST.md` 是续会入口 |
 
-## 配置和数据路径
+## 4. 运行数据和配置
 
-应用启动时会创建以下运行目录：
+应用启动时会创建：
 
 ```text
 data/
@@ -68,182 +64,172 @@ data/media-cache/
 data/uploads/
 ```
 
-关键文件和目录：
+关键运行文件：
 
 | 文件/目录 | 说明 |
 |-----------|------|
-| `data/config.json` | API 配置、代理、session 类型、下载线程数和缓存上限 |
-| `data/task-history.json` | 终态下载/预览任务历史，最多保留最近记录，不能提交 |
-| `data/telegram.session` 或自定义 session 文件 | Telethon 文件会话，不能提交 |
-| `Download/` | 用户主动下载的媒体文件 |
-| `Pictures/` | 图片文件服务目录 |
-| `data/media-cache/` | 聊天媒体预览和临时缓存 |
+| `data/config.json` | API 配置、代理、session 类型、下载线程数、缓存上限和 Web Token，可能含敏感信息 |
+| `data/task-history.json` | 最近终态下载/预览任务历史 |
+| `data/*.session` | Telethon 文件 session |
+| `Download/` | 文档、视频、音频等下载文件 |
+| `Pictures/` | 图片下载文件 |
+| `data/media-cache/` | 聊天媒体查看器按需缓存 |
 | `data/uploads/` | 发送文件时的临时上传目录 |
 
-配置加载规则：
+配置字段白名单：
 
-1. `load_config()` 从 `data/config.json` 读取配置，缺失时写入默认配置。
-2. `api_config()` 只允许更新白名单字段：`api_id`、`api_hash`、`phone`、`proxy`、`session_type`、`session_file`、`string_session`、`download_threads`、`cache_limit_mb`、`web_token`。
-3. `download_threads` 被限制在 `1..128`，`cache_limit_mb` 被限制在 `128..10240`。
-4. 修改配置后调用 `tg.reload_config()`，同时刷新下载线程池和媒体缓存清理。
+```text
+api_id
+api_hash
+phone
+proxy
+session_type
+session_file
+string_session
+download_threads
+cache_limit_mb
+web_token
+```
 
-配置和 API 参数错误边界：
+配置校验边界：
 
-- `api_id` 范围为 `1..2147483647`；`api_hash` 必须是 32 位十六进制字符串；手机号只接受可选 `+` 加 5 到 20 位数字。
-- 代理只支持 `socks4://` 或 `socks5://`，host 必填，端口默认 1080 且范围为 `1..65535`，不能带 path、query 或 fragment。
-- Session 文件名只接受 `data/` 目录内文件名，可带或不带 `.session` 后缀；`session_type` 只支持 `file/string`。
-- Web Token 长度为 8 到 256 字符，不能包含空白字符。
-- JSON POST 必须是 JSON 对象；非 JSON 对象和 JSON 语法错误返回 400。
-- `/api/dialogs` 的 `limit` 范围为 `1..500`；`/api/messages` 的 `limit` 范围为 `1..200`，`offset_id` 范围为 `0..9223372036854775807`；`/api/download-files` 的 `limit` 范围为 `1..100`，`offset` 范围为 `0..100000`。
-- 文件访问只支持单段 `Range: bytes=...`；非法、多段或越界 Range 返回 416，非 `bytes` Range 按普通请求处理。
+- `api_id`：`1..2147483647`。
+- `api_hash`：32 位十六进制字符串；留空沿用已保存值。
+- `phone`：可选 `+` 加 5 到 20 位数字。
+- `proxy`：仅支持 `socks4://` 和 `socks5://`；host 必填；端口默认 1080，范围 `1..65535`；拒绝 path、query 和 fragment；含凭据代理不会回显原文。
+- `session_type`：仅支持 `file` 或 `string`。
+- `session_file`：只接受 `data/` 目录内文件名，可带或不带 `.session` 后缀；实际存储文件使用 `data/*.session`。
+- `string_session`：必须能被 Telethon `StringSession` 解析。
+- `download_threads`：`1..128`。
+- `cache_limit_mb`：`128..10240`。
+- `web_token`：8 到 256 字符，不能包含空白字符；留空不修改已保存 Token。
 
-## 功能入口
+Web Token 来源优先级：
 
-### 页面入口
+```text
+TELEGRAM_WEB_TOKEN
+WEB_TELEGRAM_TOKEN
+data/config.json 中的 web_token
+```
+
+默认监听 `127.0.0.1`。对外监听必须已有 Web Token，否则启动拒绝。
+
+## 5. API 和页面入口
+
+页面路由：
 
 | 路由 | 说明 |
 |------|------|
 | `GET /` | 重定向到 `/chats` |
-| `GET /login` | 登录与配置页面 |
+| `GET /auth` / `POST /auth` | Web Token 验证页 |
+| `GET /login` | 登录和配置页 |
 | `GET /chats` | 会话列表 |
-| `GET /chat/<peer>` | 单会话消息页面 |
+| `GET /chat/<peer>` | 单会话消息 |
 | `GET /downloads` | 下载任务和已下载文件 |
-| `GET /diagnostics` | 只读脱敏运行诊断页面 |
+| `GET /diagnostics` | 只读脱敏诊断页 |
 
-### API 入口
+配置、鉴权、登录和 session API：
 
 | API | 说明 |
 |-----|------|
-| `GET/POST /api/config` | 读取/保存运行配置 |
-| `GET /api/status` | Telegram 连接和授权状态 |
-| `POST /api/login/start` | 创建客户端并发起验证码登录 |
+| `GET/POST /api/config` | 读取/保存配置，响应脱敏 secret 字段 |
+| `GET /api/status` | Telegram 连接和授权摘要 |
+| `POST /api/login/start` | 根据配置创建客户端并发送验证码 |
 | `POST /api/login/code` | 提交验证码 |
-| `POST /api/login/password` | 提交 2FA 密码 |
-| `POST /api/logout` | 退出登录 |
-| `GET /api/diagnostics` | 返回脱敏运行诊断状态，不暴露 `api_hash`、StringSession、`.session` 内容、Web Token 或代理凭据 |
-| `POST /api/session/export-token` | 生成 60 秒一次性 session 导出令牌，类型为 `string` 或 `file` |
-| `GET/POST /api/session/string` | 导出或导入 StringSession；导出必须带一次性 `export_token` |
-| `GET/POST /api/session/file` | 导出或导入 `.session` 文件；导出必须带一次性 `export_token` |
-| `GET /api/dialogs` | 获取会话列表 |
-| `GET /api/messages` | 获取消息列表，支持 `offset_id` 翻页 |
+| `POST /api/login/password` | 提交两步验证密码 |
+| `POST /api/logout` | 退出 Telegram 登录 |
+| `GET /api/diagnostics` | 脱敏运行诊断状态 |
+| `POST /api/session/export-token` | 生成 60 秒一次性导出令牌 |
+| `GET/POST /api/session/string` | 导出或导入 StringSession |
+| `GET/POST /api/session/file` | 导出或导入 `.session` 文件 |
+
+会话、消息、媒体和下载 API：
+
+| API | 说明 |
+|-----|------|
+| `GET /api/dialogs?limit=...` | 会话列表，`limit` 范围 `1..500` |
+| `GET /api/messages?peer=...&limit=...&offset_id=...` | 消息列表，`limit` 范围 `1..200`，`offset_id` 范围 `0..9223372036854775807` |
 | `POST /api/send` | 发送文本消息 |
 | `POST /api/send-file` | 上传并发送文件 |
 | `POST /api/media/thumb` | 获取媒体缩略图 |
-| `POST /api/media/prepare` | 准备媒体预览缓存 |
-| `POST /api/download-media` | 创建下载任务 |
-| `GET/DELETE /api/task/<task_id>` | 查询任务、取消运行中任务或移除任务记录 |
+| `POST /api/media/prepare` | 按需准备媒体查看器缓存 |
+| `POST /api/download-media` | 创建后台下载任务 |
+| `GET/DELETE /api/task/<task_id>` | 查询任务、取消活跃任务或移除记录 |
 | `POST /api/task/<task_id>/pause` | 暂停任务 |
 | `POST /api/task/<task_id>/resume` | 恢复任务 |
-| `GET /api/tasks` | 下载/预览任务列表 |
-| `GET /api/download-files` | 已下载文件列表 |
-| `GET /download-file/<filename>` | Range 方式访问下载文件 |
-| `GET /pictures/<filename>` | Range 方式访问图片目录文件 |
-| `GET /media-cache/<filename>` | Range 方式访问媒体缓存 |
+| `GET /api/tasks` | 下载/预览任务列表和终态历史 |
+| `GET /api/download-files?limit=...&offset=...` | 已下载文件分页，`limit` 范围 `1..100`，`offset` 范围 `0..100000` |
 
-### Socket.IO
+文件路由：
+
+| 路由 | 说明 |
+|------|------|
+| `GET /download-file/<filename>` | 访问 `Download/` 内文件 |
+| `GET /pictures/<filename>` | 访问 `Pictures/` 内文件 |
+| `GET /media-cache/<filename>` | 访问 `data/media-cache/` 内文件，带 7 天强缓存 |
+
+文件访问只允许解析到对应目录内部。`.part` 文件和符号链接不会出现在已下载文件列表。文件响应支持单段 `Range: bytes=...`；非法、多段或越界 Range 返回 416 和 `Content-Range: bytes */<size>`；非 `bytes` Range 被忽略并按普通 200 响应。
+
+Socket.IO：
 
 | 事件 | 说明 |
 |------|------|
-| `connect` | 服务端返回 `server_message` |
+| `connect` | 受 Web Token 鉴权保护，连接成功后服务端发送 `server_message` |
 | `new_message` | Telethon 新消息事件转发给前端 |
 
-## 开源复用策略
+## 6. 核心工作流
 
-阶段开发前必须先判断是否已有成熟方案可复用：
+启动和访问：
 
-| 场景 | 优先方向 |
-|------|----------|
-| Telegram API | 优先延续 `Telethon`，除非阶段明确证明需要替换 |
-| Web 框架和实时事件 | 优先延续 `Flask` / `Flask-SocketIO`，避免无目标迁移 |
-| Markdown/富文本 | 优先评估成熟、安全的解析库，不继续扩展脆弱正则 |
-| 大文件下载/断点续传 | 优先评估成熟库或标准协议实现，再决定是否保留自研任务控制 |
-| 前端组件/图标/交互 | 若引入 npm 构建链，优先使用维护活跃、体积可控的成熟组件 |
-| 测试工具 | Python 后端优先 `pytest` 或标准库 `unittest`；前端行为可评估 Playwright |
+1. `scripts/run-termux.sh` 或 `python app.py` 启动服务。
+2. 默认监听 `127.0.0.1:5000`。
+3. 如果设置 Web Token，受保护页面会跳转 `/auth?next=...`，API 缺少 Token 返回“需要 Web Token，请先验证”。
+4. 对外监听需要先通过环境变量或本地配置设置 Web Token。
 
-复用前必须记录：
+登录和 session：
 
-- 项目地址或包名。
-- 许可证是否兼容。
-- 最近维护状态和社区活跃度。
-- 替代当前自研代码的边界。
-- 新增依赖、配置和验证命令。
-- 不采用该方案的原因。
+1. `/login` 读取 `/api/config`，敏感字段只显示脱敏占位符。
+2. 保存配置走 `/api/config`，发送验证码走 `/api/login/start`。
+3. 验证码和 2FA 分别走 `/api/login/code` 与 `/api/login/password`。
+4. StringSession 和 `.session` 导入会弹出确认，成功后重置当前客户端。
+5. StringSession 和 `.session` 导出必须先申请 60 秒一次性令牌，令牌使用后立即失效。
 
-## 分阶段会话开发制度
+会话和消息：
 
-本项目开发必须采用多阶段、多会话方式，避免单次会话上下文过大。每个阶段只处理一个清晰目标，完成后提交 Git，并生成阶段进度和交接文档。
+1. `/chats` 默认请求 `/api/dialogs?limit=120`。
+2. 搜索只过滤前端已加载会话，字段包括名称、用户名、peer 和 ID。
+3. `/chat/<peer>` 默认请求 `/api/messages?limit=80`，更早消息使用 `offset_id` 翻页。
+4. 文本消息使用安全 Markdown 渲染，不执行原始 HTML。
 
-### 阶段编号
+媒体和下载：
 
-阶段编号使用：
+1. 消息列表优先请求缩略图，不自动下载原文件。
+2. 点击媒体预览时，前端调用 `/api/media/prepare` 按需准备缓存。
+3. 媒体下载按钮调用 `/api/download-media` 创建后台任务。
+4. 照片下载到 `Pictures/`，其他媒体或文件下载到 `Download/`。
+5. 任务支持暂停、恢复、取消；终态记录可移除但不删除已下载文件。
+6. 终态任务历史写入 `data/task-history.json`，运行中任务不持久化。
 
-```text
-Phase 0, Phase 1, Phase 2, ...
-```
+诊断和错误：
 
-文档路径使用：
+1. `/diagnostics` 只渲染 `/api/diagnostics` 的白名单状态。
+2. 内部 API 错误返回通用文案和 `error_id`，前端显示错误 ID 并在支持剪贴板时尝试复制。
+3. 服务端日志可搜索 `internal api error <error_id>`。
+4. 诊断脚本不读取 `data/config.json`，也不会打印 Token、StringSession、`.session`、代理凭据或 Telegram API 凭据。
 
-```text
-docs/progress/YYYY-MM-DD-phase-N-主题.md
-docs/handoff/YYYY-MM-DD-phase-N-to-phase-N+1.md
-docs/handoff/LATEST.md
-```
+## 7. 前端交互基线
 
-`LATEST.md` 必须包含最新完整交接内容，或明确指向最新交接文件并保留阶段摘要。
+- 顶部状态展示 Telegram 连接/授权摘要，刷新按钮只刷新状态摘要。
+- 底部导航是主导航，当前页面使用 `aria-current="page"`。
+- 敏感操作使用自定义确认弹窗，支持取消、确认、Esc 关闭、Tab/Shift+Tab 焦点循环。
+- 媒体查看器支持焦点恢复、Esc 关闭、左右方向键切换和焦点循环。
+- 登录、会话、聊天、下载和诊断页面都有标题关联、列表语义、live region 或动态 `aria-busy`。
+- 下载页文件分页状态和加载更多按钮保持可访问状态。
+- 前端 API 错误统一通过 toast 展示；401 会跳转 `/auth?next=...`。
 
-### 每阶段启动流程
+## 8. 测试和验证
 
-新阶段开始时，主代理必须先执行：
-
-1. 阅读 `Telegram_Web开发.md`。
-2. 阅读 `docs/handoff/LATEST.md` 和最新 `docs/progress/`。
-3. 运行 `git status --short`，确认工作区是否干净。
-4. 查看最近提交：`git log --oneline -5`。
-5. 根据交接文档确认本阶段目标、验收标准、风险和建议子代理拆分。
-6. 如目标涉及依赖或组件，先查成熟开源方案，再决定复用或实现。
-
-### 主代理职责
-
-- 确定阶段目标和验收边界。
-- 拆分子代理任务，避免多个代理同时修改同一文件。
-- 负责关键架构判断、最终编辑整合、验证和提交。
-- 维护 `docs/progress/` 和 `docs/handoff/`。
-- 遇到用户未授权的凭据、运行数据或无关目录时停止扩展。
-
-### 子代理职责
-
-子代理按任务类型使用：
-
-| 类型 | 适用任务 | 写权限 |
-|------|----------|--------|
-| Explorer | 只读梳理路由、数据流、依赖、测试缺口、开源方案候选 | 不改文件 |
-| Worker | 修改明确文件集合，如 `app.py`、`static/js/app.js`、测试文件 | 只改分配范围 |
-| Verifier | 跑测试、审 diff、复查安全和文档一致性 | 默认不改文件 |
-
-子代理必须收到明确边界：
-
-- 本阶段目标。
-- 允许读取/修改的路径。
-- 禁止触碰的运行数据和凭据。
-- 预期输出格式。
-- 不回退其他代理或用户的改动。
-
-### 阶段实施流程
-
-1. **被动检查**：先看文件、路由、配置、日志和现有行为。
-2. **目标确认**：把本阶段只做什么、不做什么写入进度文档草稿。
-3. **开源复用评估**：涉及通用能力时先评估 GitHub/npm/PyPI 成熟方案。
-4. **小步修改**：优先按现有 Flask/Telethon/Jinja/原生 JS 风格实现。
-5. **验证**：运行最低回归；行为改动必须有可复现命令或手动步骤。
-6. **文档更新**：更新阶段进度和交接文档。
-7. **Git 提交**：非交互式提交，提交信息体现阶段和结果。
-8. **续会准备**：最终回复给出下一阶段口令和最新交接文档路径；若外部环境支持自动新会话，则以该交接文档作为启动上下文。
-
-说明：仓库内可以自动生成文档和 Git 提交；真正“开启新会话”取决于 Codex CLI 或外部调度器能力。若环境不支持自动启动，新会话由用户发送“继续 telegram-web”触发，但仍必须依据 `docs/handoff/LATEST.md` 继续。
-
-## 每阶段必守验收
-
-最低命令：
+每阶段最低回归：
 
 ```sh
 PYTHONPYCACHEPREFIX="${TMPDIR:-$HOME/.cache}/telegram-web-pycache" python -m py_compile app.py
@@ -251,45 +237,29 @@ git diff --check
 git status --short
 ```
 
-涉及依赖时：
+推荐完整回归：
 
 ```sh
-python -m pip check
-```
-
-涉及后端行为时，按改动范围增加：
-
-```sh
-python -m unittest discover
-```
-
-如果仓库尚无测试，阶段内新增共享逻辑或修复回归时，应优先补最小可运行测试。
-
-涉及前端行为时，至少记录一组浏览器手动验证：
-
-```sh
+sh -n scripts/diagnose-runtime.sh
+sh scripts/diagnose-runtime.sh
+TELEGRAM_WEB_HOST=0.0.0.0 sh scripts/diagnose-runtime.sh
+TELEGRAM_WEB_DIAGNOSTICS_URL=http://127.0.0.1:9/api/diagnostics sh scripts/diagnose-runtime.sh
+sh scripts/check-browser-smoke-env.sh
+PYTHONPYCACHEPREFIX="${TMPDIR:-$HOME/.cache}/telegram-web-pycache" python -m py_compile app.py
+PYTHONPYCACHEPREFIX="${TMPDIR:-$HOME/.cache}/telegram-web-pycache" python -Wd -m unittest discover -v
 node --check static/js/app.js
 node --check tests/frontend_smoke.js
 node tests/frontend_smoke.js
+git diff --check
+git diff --cached --check
 ```
 
-有真实浏览器环境时，再记录一组手动或自动验证：
+当前自动化基线：
 
-```text
-打开 /login -> 检查配置加载 -> 打开 /chats -> 打开一个 /chat/<peer> -> 预览/下载媒体 -> 查看 /downloads
-```
-
-涉及服务启动时：
-
-```sh
-python app.py
-```
-
-默认访问：
-
-```text
-http://127.0.0.1:5000
-```
+- 后端单测：`tests/test_core.py`，当前 57 个测试。
+- 前端 smoke：`tests/frontend_smoke.js`，输出 `frontend smoke passed`。
+- 真实浏览器 smoke：仍为手动清单，见 `docs/browser-smoke.md`。
+- 当前环境检查脚本会报告 Playwright 模块和常见浏览器命令是否可用，但不安装依赖。
 
 敏感信息检查：
 
@@ -297,17 +267,67 @@ http://127.0.0.1:5000
 rg -n "api_hash|StringSession|\\.session|Bearer\\s+[A-Za-z0-9._-]{16,}|sk-[A-Za-z0-9]|password\\s*[:=]" .
 ```
 
-命中示例、字段名或文档说明可以保留；真实凭据必须移除。
+命中字段名、示例、测试假数据和文档说明可以保留；真实凭据必须移除。
 
-## 进度文档模板
+## 9. 开源复用策略
 
-每阶段创建或更新：
+阶段开发前判断是否已有成熟方案可复用：
+
+| 场景 | 优先方向 |
+|------|----------|
+| Telegram API | 继续优先使用 `Telethon` |
+| Web 框架和实时事件 | 继续使用 `Flask` / `Flask-SocketIO` |
+| Markdown/富文本 | 若扩展语法，优先评估成熟安全解析库 |
+| 大文件下载和 Range | 现有实现满足单段 Range；复杂断点续传再评估成熟库或标准实现 |
+| 前端组件 | 当前不引入构建链；如引入，必须同步 npm 元数据、锁文件和验证命令 |
+| 浏览器自动化 | 满足环境和仓库脚本条件后，再评估 Playwright 或替代方案 |
+
+采用或不采用外部方案时，需要记录：
+
+- 项目地址或包名。
+- 许可证兼容性。
+- 维护状态。
+- 替代现有代码的边界。
+- 新增依赖和验证命令。
+- 不采用的原因。
+
+## 10. 阶段开发制度
+
+阶段编号使用 `Phase N`。每阶段只处理一个清晰目标，完成后必须更新：
 
 ```text
 docs/progress/YYYY-MM-DD-phase-N-主题.md
+docs/handoff/YYYY-MM-DD-phase-N-to-phase-N+1.md
+docs/handoff/LATEST.md
 ```
 
-模板：
+新阶段启动流程：
+
+1. 阅读本文。
+2. 阅读 `docs/handoff/LATEST.md` 和最新 `docs/progress/`。
+3. 运行 `git status --short --branch`，确认工作区状态。
+4. 运行 `git log --oneline -5`，确认最近提交。
+5. 确认 Git 身份为 `liyw0205 <2650115317@qq.com>`。
+6. 根据交接文档确认阶段目标、验收标准、风险和建议拆分。
+7. 如目标涉及依赖或通用能力，先评估成熟方案。
+
+阶段实施流程：
+
+1. 被动检查：先看文件、路由、配置、文档、测试和现有行为。
+2. 明确边界：写清本阶段做什么和不做什么。
+3. 小步修改：优先沿用现有 Flask/Telethon/Jinja/原生 JS 风格。
+4. 验证：运行与改动匹配的自动化和检查命令。
+5. 文档：更新进度文档、交接文档和必要用户文档。
+6. 提交：非交互式 `git commit`。
+7. 推送：使用 SSH 推送到 `origin/main`。
+
+常用推送命令：
+
+```sh
+GIT_SSH_COMMAND='ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new' git push origin main
+```
+
+## 11. 进度文档模板
 
 ```markdown
 # Phase N 主题
@@ -354,16 +374,7 @@ docs/progress/YYYY-MM-DD-phase-N-主题.md
 - 提交：
 ```
 
-## 交接文档模板
-
-每阶段结束时创建：
-
-```text
-docs/handoff/YYYY-MM-DD-phase-N-to-phase-N+1.md
-docs/handoff/LATEST.md
-```
-
-模板：
+## 12. 交接文档模板
 
 ```markdown
 # Phase N -> Phase N+1 交接
@@ -400,23 +411,11 @@ docs/handoff/LATEST.md
 1. 阅读 `Telegram_Web开发.md`。
 2. 阅读本文。
 3. 运行 `git status --short` 和 `git log --oneline -5`。
-4. 按“下阶段目标”继续。
+4. 确认 Git 身份。
+5. 按“下阶段目标”继续。
 ```
 
-## 建议阶段路线
-
-| 阶段 | 主题 | 目标 |
-|------|------|------|
-| Phase 0 | 文档和流程基线 | 建立开发方案、进度/交接文档规则并提交 |
-| Phase 1 | 基线整理和安全边界 | 增加 `.gitignore`、最小测试骨架、配置/路径安全检查 |
-| Phase 2 | 登录和 session 可靠性 | 梳理 `StringSession`/文件 session 导入导出、错误提示和代理校验 |
-| Phase 3 | 媒体预览和下载任务 | 强化任务状态、暂停/取消语义、缓存清理和 Range 安全 |
-| Phase 4 | 前端交互和移动端体验 | 优化聊天流、图库、发送文件、下载页和状态反馈 |
-| Phase 5 | 部署和运维 | 补充启动脚本、环境变量、反向代理、备份恢复和发布说明 |
-
-阶段路线不是硬性排期；每个新阶段以最新交接文档和用户目标为准。
-
-## 搜索与验证命令
+## 13. 常用检索命令
 
 查看 Flask 路由：
 
@@ -424,13 +423,19 @@ docs/handoff/LATEST.md
 rg -n "^@app\\.route|^@socketio|def api_|def page_" app.py
 ```
 
-查看入口、数据路径和默认配置：
+查看配置和路径：
 
 ```sh
-rg -n "@app.route|@socketio.on|DATA_DIR|DOWNLOAD_DIR|PICTURES_DIR|CONFIG_FILE|DEFAULT_CONFIG" app.py
+rg -n "DATA_DIR|DOWNLOAD_DIR|PICTURES_DIR|CACHE_DIR|UPLOAD_DIR|CONFIG_FILE|DEFAULT_CONFIG|CONFIG_FIELDS" app.py
 ```
 
-查看 Telegram 客户端主流程：
+查看校验和参数边界：
+
+```sh
+rg -n "normalize_|parse_proxy|query_int_arg|request_json_object|parse_range_header|send_file_range" app.py tests/test_core.py
+```
+
+查看 Telegram 主流程：
 
 ```sh
 rg -n "class TelegramService|ensure_client|start_login|sign_in|dialogs|messages|send_|download_media|prepare_media" app.py
@@ -439,13 +444,7 @@ rg -n "class TelegramService|ensure_client|start_login|sign_in|dialogs|messages|
 查看任务状态：
 
 ```sh
-rg -n "class TaskStore|task_controls|tasks\\.update|pause|resume|canceled" app.py static/js/app.js
-```
-
-查看运行数据路径：
-
-```sh
-rg -n "DATA_DIR|DOWNLOAD_DIR|PICTURES_DIR|CACHE_DIR|UPLOAD_DIR|CONFIG_FILE" app.py
+rg -n "class TaskStore|task_controls|tasks\\.update|pause|resume|canceled|terminal_statuses" app.py static/js/app.js
 ```
 
 查看前端 API 调用：
@@ -454,83 +453,43 @@ rg -n "DATA_DIR|DOWNLOAD_DIR|PICTURES_DIR|CACHE_DIR|UPLOAD_DIR|CONFIG_FILE" app.
 rg -n "api\\(|fetch\\(|io\\(|/api/|socket|downloadMedia|prepareMedia|send" static/js/app.js templates
 ```
 
-## 开工口令
+## 14. 阶段摘要
 
-- “继续 telegram-web” -> 先读 `Telegram_Web开发.md` 和 `docs/handoff/LATEST.md`，再执行最新交接目标。
-- “进入 Phase N” -> 按对应阶段交接文档启动，主代理先拆分子代理任务。
-- “只做当前阶段收尾” -> 只更新进度/交接文档、跑验证、提交 Git，不开启新功能。
-- “评估开源方案” -> 子代理先查候选，主代理决定复用边界并记录在进度文档。
+| 阶段 | 摘要 |
+|------|------|
+| Phase 0 | 建立开发方案、进度/交接文档规则和阶段验收方式 |
+| Phase 1 | 建立 `.gitignore`、最小测试、JSON 请求体、文件路径、配置脱敏和默认本机监听安全基线 |
+| Phase 2 | 增加 Web Token 鉴权、配置字段校验、Socket.IO 鉴权和登录页配置保存 |
+| Phase 3 | 强化媒体 Range、任务终态保护、取消竞态、`.part` 临时文件和任务反馈 |
+| Phase 4 | 增加下载文件分页、内部错误 `error_id` 和移动端布局收紧 |
+| Phase 5 | 补充 StringSession 和 `.session` 导入导出，StringSession 登录后自动持久化 |
+| Phase 6 | 增加终态任务历史、错误 ID 前端展示/复制和启动脚本 |
+| Phase 7 | 为 session 导出增加 60 秒一次性令牌，统一敏感操作确认 |
+| Phase 8-10 | 建立并扩展纯 Node 前端 smoke harness，覆盖确认、session、任务、下载和 API 错误 |
+| Phase 11-15 | 自定义确认弹窗和媒体查看器键盘/焦点行为完善，重组前端 smoke |
+| Phase 16 | 评估真实浏览器 smoke 条件，新增环境检查脚本和手动 smoke 清单 |
+| Phase 17-20 | 增加运行诊断脚本、runbook、`/api/diagnostics` 和 `/diagnostics` 页面 |
+| Phase 21-27 | 为诊断、登录、全局反馈、下载、聊天、会话页面补齐可访问性语义并收口到 browser smoke |
+| Phase 28-29 | 同步 README/runbook 的验证、启动、对外监听、Web Token、备份和恢复说明 |
+| Phase 30 | 对齐登录页、StringSession、`.session`、Web Token、一次性令牌文案和测试 |
+| Phase 31 | 对齐下载任务、终态记录、分页文件、`.part`、错误 ID 和中文任务状态文案 |
+| Phase 32 | 对齐聊天页发送、媒体缩略图、按需准备、下载任务和媒体查看器文案 |
+| Phase 33 | 对齐会话列表搜索、无匹配空状态、诊断摘要端口和运行端口文案 |
+| Phase 34 | 对齐顶部状态、主导航、Web Token 验证页、401 提示和错误 ID 复制提示 |
+| Phase 35 | 对齐配置校验、JSON、分页、Range 和代理端口错误文案，收敛代理端口错误 |
+| Phase 36 | 重生成主开发文档，按当前代码和文档基线重整架构、边界、验证和阶段制度 |
 
-## 最后更新
+## 15. 后续建议
 
-2026-07-04：建立 telegram-web 本地开发方案，明确项目定位、固定边界、路由/API、数据路径、开源复用策略、分阶段多会话机制、主代理+子代理协作、进度/交接文档模板和阶段验收命令。
+下一阶段建议继续 Phase 37：登录页配置输入提示和前端错误展示边界复核。
 
-2026-07-04：Phase 1 建立安全基线，新增 `.gitignore` 和最小单测，收紧 JSON 请求体、文件路径边界、配置响应脱敏和默认本机监听。
+优先检查：
 
-2026-07-04：Phase 2 增加 Web Token 访问控制、配置字段保存前校验、Socket.IO 鉴权和登录页配置保存入口，并删除未启用历史模板。
+- `templates/login.html` 输入控件、placeholder、隐藏说明和轻量 HTML 属性。
+- `static/js/app.js` 中 `loadLoginPage()`、`loginConfigPayload()`、`saveLoginConfig()`、`startLogin()` 的错误展示。
+- README、runbook、browser smoke 和测试断言是否与后端实际边界一致。
 
-2026-07-04：Phase 3 强化媒体 Range 响应、任务终态保护、取消竞态处理、`.part` 临时下载和下载页任务操作反馈，测试扩展到 32 个。
+限制：
 
-2026-07-04：Phase 4 优化下载页分页加载和任务/文件刷新节奏，增加内部错误通用响应与 `error_id`，小幅收紧移动端下载卡片和聊天输入布局，测试扩展到 36 个。
-
-2026-07-04：Phase 5 补充 StringSession 和 `.session` 文件导入导出，StringSession 登录成功后自动持久化，并完善 README 中部署、备份和恢复说明。
-
-2026-07-04：Phase 6 增加终态任务历史持久化到 `data/task-history.json`，重启后恢复最近任务历史；前端内部错误提示展示 `error_id` 并尝试复制，新增 Termux/本机启动脚本。
-
-2026-07-05：Phase 7 为 StringSession 和 `.session` 导出增加 60 秒一次性导出令牌，统一退出登录、导入/导出 session、取消/移除任务的前端确认语义，并补充错误 ID 日志检索说明。
-
-2026-07-05：Phase 8 增加纯 Node 前端行为 smoke 测试，不引入 Playwright/npm 依赖，覆盖确认取消不发请求、确认后申请一次性导出令牌、文件导出 URL 和任务删除确认。
-
-2026-07-05：Phase 9 扩展前端 smoke 覆盖下载任务渲染、任务接口错误、下载文件分页、分页按钮状态和下一页错误 toast，继续保持无前端构建链。
-
-2026-07-05：Phase 10 重整前端 smoke harness，补充 `api()` 错误 ID 复制、401 跳转和 `loadLoginPage()` 脱敏配置占位符覆盖，继续不引入前端测试依赖。
-
-2026-07-05：Phase 11 用轻量自定义确认弹窗替换敏感操作的原生 `confirm()`，覆盖确认、取消、Esc 关闭和并发确认边界；本地评估真实浏览器 smoke 条件后暂不引入 Playwright。
-
-2026-07-05：Phase 12 为自定义确认弹窗增加轻量 focus trap，覆盖 Tab、Shift+Tab 和弹窗外焦点回拉；媒体查看器和 composer 键盘交互作为后续独立阶段处理。
-
-2026-07-05：Phase 13 为媒体查看器增加打开前焦点记录、关闭后焦点恢复、Esc 关闭和左右方向键切换，并补充纯 Node smoke 覆盖。
-
-2026-07-05：Phase 14 为媒体查看器增加最小 focus trap，覆盖关闭、下载、上一项、下一项按钮的 Tab / Shift+Tab 循环；点击遮罩关闭暂不引入，避免移动端误触行为变化。
-
-2026-07-05：Phase 15 重组纯 Node 前端 smoke，抽出元素 ID、焦点和键盘断言 helper，并按确认弹窗、媒体查看器、登录/API、session/任务确认和下载页分组执行，保持无前端测试依赖。
-
-2026-07-05：Phase 16 评估真实浏览器 smoke 条件，新增环境检查脚本和手动浏览器 smoke 清单；当前环境缺少 Playwright/浏览器命令，因此不引入新 npm 依赖。
-
-2026-07-05：Phase 17 补充运行诊断脚本和运行排障 runbook，覆盖启动环境、Web Token、日志、常见故障和服务化边界；不新增守护进程依赖。
-
-2026-07-05：Phase 18 新增 `/api/diagnostics` 脱敏诊断状态接口，并让运行诊断脚本支持可选 HTTP 探测；测试扩展到 50 个，覆盖诊断输出不泄露 secret。
-
-2026-07-05：Phase 19 新增 `/diagnostics` 只读诊断页面和底部导航入口，前端只按白名单渲染布尔、枚举和数值状态，并补充纯 Node smoke 覆盖诊断页脱敏渲染和错误状态。
-
-2026-07-05：Phase 20 复核真实浏览器 smoke 条件仍不足以引入自动化浏览器测试，将 `/diagnostics` 加入手动浏览器 smoke 清单，并记录继续不引入 npm/Playwright 依赖的边界。
-
-2026-07-05：Phase 21 为 `/diagnostics` 增加标题关联、刷新按钮标签、live status、列表语义、动态 `aria-busy` 和成功/错误状态 class，并补充后端页面语义测试和纯 Node smoke 断言。
-
-2026-07-05：Phase 22 为 `/login` 配置表单补充显式 label 绑定、区域标题关联、敏感字段隐藏说明、操作按钮分组和按钮类型，并新增登录页静态可访问性测试。
-
-2026-07-05：Phase 23 为顶部连接状态、刷新按钮和 toast 容器补充 live/status 语义，`refreshStatus()` 增加动态 `aria-busy`，并补充全局反馈静态测试和纯 Node smoke。
-
-2026-07-05：Phase 24 为下载页任务列表、文件列表、分页状态和刷新/加载按钮补充可访问性语义，下载刷新流程增加动态 `aria-busy`/`aria-disabled`，并补充下载页静态测试和纯 Node smoke。
-
-2026-07-05：Phase 25 为聊天页消息列表、文字/文件发送区和媒体查看器补充可访问性语义，消息加载和发送流程增加动态 `aria-busy`/`aria-hidden`，并补充聊天页静态测试和纯 Node smoke。
-
-2026-07-05：Phase 26 为会话列表页标题、搜索框、刷新按钮、列表容器、空/错误状态、动态会话项和未读徽标补充可访问性语义，并补充会话页静态测试和纯 Node smoke。
-
-2026-07-05：Phase 27 将 Phase 21-26 的登录、会话列表、聊天页、下载页、诊断页、全局反馈和媒体查看器可访问性检查收口到手动浏览器 smoke 清单，继续不引入 Playwright/npm 依赖。
-
-2026-07-05：Phase 28 同步 README 和运行 runbook 的验证入口，补齐诊断脚本、可选 `/api/diagnostics` 探测、手动浏览器 smoke 入口、Web Token 和 `data/config.json` 边界说明；未改运行逻辑或脚本行为。
-
-2026-07-05：Phase 29 对齐 README 和运行 runbook 的启动、对外监听、Web Token 来源优先级、备份与恢复说明，新增 runbook 备份恢复章节；未改运行逻辑、测试或脚本行为。
-
-2026-07-05：Phase 30 对齐登录页与文档中的 StringSession、`.session`、Web Token、导入导出和 60 秒一次性令牌文案，补充登录页辅助说明与测试断言；未改登录、session 或鉴权行为。
-
-2026-07-05：Phase 31 对齐下载页暂停、恢复、取消任务、移除终态记录、分页文件、`.part` 临时文件和错误 ID 边界文案，将任务种类/状态改为中文显示并同步 README、runbook、浏览器 smoke 与测试断言；未改下载状态机或文件枚举逻辑。
-
-2026-07-05：Phase 32 对齐聊天页文字/文件发送、媒体缩略图、按需准备、下载任务创建和媒体查看器文案，补充 README、runbook、浏览器 smoke 与前端/后端测试断言；未改发送、媒体缓存或下载任务行为。
-
-2026-07-05：Phase 33 对齐会话列表搜索字段、无匹配空状态、诊断摘要端口和运行端口文案，补充 README、runbook、浏览器 smoke 与前端/后端测试断言；未改会话加载、诊断采集、脱敏、鉴权或 API 行为。
-
-2026-07-05：Phase 34 对齐顶部 Telegram 状态、主导航当前项、Web Token 验证页、401 提示和错误 ID 复制提示文案，补充 README、runbook、浏览器 smoke 与前端/后端测试断言；未改鉴权判断、Socket.IO、错误包装结构或导航目标。
-
-2026-07-05：Phase 35 对齐配置校验、JSON 请求、分页参数、Range 请求和代理端口错误文案，修正代理端口非法时的中文错误收敛，并同步 README、runbook、浏览器 smoke 与后端测试断言；未改配置规则、分页逻辑、Range 策略、鉴权逻辑或 Telethon 行为。
+- 不改变登录流程、配置保存规则、session 导入导出、鉴权逻辑、Telethon 行为或新增依赖。
+- 不读取或提交运行数据、session、Token 或真实 Telegram 凭据。
