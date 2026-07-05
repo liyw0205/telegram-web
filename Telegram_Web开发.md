@@ -1,6 +1,6 @@
 # Telegram Web 开发文档
 
-> 当前基线：Phase 38，真实浏览器 smoke 条件和登录页提示回归收口。实际代码版本以 `git log -1 --oneline` 为准。
+> 当前基线：Phase 39，登录页配置保存后刷新状态和并发边界复核。实际代码版本以 `git log -1 --oneline` 为准。
 > 仓库：`telegram-web`
 > 应用形态：Flask + Flask-SocketIO + Telethon 的单进程个人 Telegram Web 管理界面。
 > 前端形态：Jinja 模板 + 原生 JavaScript/CSS，无 npm 构建链。
@@ -225,6 +225,7 @@ Socket.IO：
 - 媒体查看器支持焦点恢复、Esc 关闭、左右方向键切换和焦点循环。
 - 登录、会话、聊天、下载和诊断页面都有标题关联、列表语义、live region 或动态 `aria-busy`。
 - 登录页配置输入提供与后端边界一致的轻量 HTML 提示和隐藏辅助说明；真正校验仍以后端中文错误为准。
+- 登录页保存配置、发送验证码、提交验证码、提交 2FA 和退出登录同一时间只处理一个操作；重复触发会显示中文忙碌提示。
 - 下载页文件分页状态和加载更多按钮保持可访问状态。
 - 前端 API 错误统一通过 toast 展示；401 会跳转 `/auth?next=...`。
 
@@ -481,15 +482,16 @@ rg -n "api\\(|fetch\\(|io\\(|/api/|socket|downloadMedia|prepareMedia|send" stati
 | Phase 36 | 重生成主开发文档，按当前代码和文档基线重整架构、边界、验证和阶段制度 |
 | Phase 37 | 对齐登录页配置输入提示、隐藏辅助说明、前端 payload smoke 和后端中文错误 toast 覆盖 |
 | Phase 38 | 复核真实浏览器自动化条件，收口未保存 `api_hash` 运行时提示和 browser smoke 结论 |
+| Phase 39 | 收口登录页配置保存刷新等待、数字字段字符串化和登录操作忙碌保护 |
 
 ## 15. 后续建议
 
-下一阶段建议继续 Phase 39：登录页配置保存后刷新状态和并发边界复核。
+下一阶段建议继续 Phase 40：Session 迁移操作刷新状态和并发边界复核。
 
 优先检查：
 
-- `saveLoginConfig()` 保存成功后会触发 `loadLoginPage()` 刷新表单；复核该刷新是否需要显式等待、禁用按钮或状态反馈。
-- 复核保存配置、发送验证码、提交验证码和提交 2FA 的连续点击/失败回退边界。
+- 复核 `importStringSession()`、`importSessionFile()` 成功后 `loadLoginPage()` 与 `refreshStatus()` 是否需要等待或忙碌保护。
+- 复核 StringSession 导入、`.session` 导入、StringSession 导出和 `.session` 导出的连续点击/取消/失败回退边界。
 - 如发现状态竞态或提示延迟，优先在原生 JS 中做小范围状态控制和 smoke 覆盖。
 
 限制：

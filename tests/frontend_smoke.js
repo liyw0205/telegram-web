@@ -152,9 +152,9 @@ function createElementState(initial = {}) {
   };
 }
 
-function routeResponse(value, path, options) {
+async function routeResponse(value, path, options) {
   try {
-    const resolved = typeof value === "function" ? value(path, options) : value;
+    const resolved = await (typeof value === "function" ? value(path, options) : value);
     if (resolved instanceof Error) return response(apiFailure(resolved.message).body, 500);
     if (resolved && Object.prototype.hasOwnProperty.call(resolved, "status") && Object.prototype.hasOwnProperty.call(resolved, "body")) {
       return response(resolved.body, resolved.status);
@@ -265,7 +265,7 @@ function createHarness({ confirmResult = true, search = "", routes = {} } = {}) 
       calls.fetch.push({ path, options });
       for (const [prefix, value] of Object.entries(routes)) {
         if (String(path).startsWith(prefix)) {
-          return routeResponse(value, path, options);
+          return await routeResponse(value, path, options);
         }
       }
       if (path === "/api/session/export-token") {
@@ -564,11 +564,11 @@ async function testLoadLoginPageUsesRedactedConfigPlaceholders() {
 
   await harness.context.loadLoginPage();
 
-  assert.strictEqual(harness.elements.get("api_id").value, 12345);
+  assert.strictEqual(harness.elements.get("api_id").value, "12345");
   assert.strictEqual(harness.elements.get("phone").value, "+8613800000000");
   assert.strictEqual(harness.elements.get("session_type").value, "string");
-  assert.strictEqual(harness.elements.get("download_threads").value, 8);
-  assert.strictEqual(harness.elements.get("cache_limit_mb").value, 2048);
+  assert.strictEqual(harness.elements.get("download_threads").value, "8");
+  assert.strictEqual(harness.elements.get("cache_limit_mb").value, "2048");
   assert.strictEqual(harness.elements.get("api_hash").value, "");
   assert.strictEqual(harness.elements.get("api_hash").placeholder, "已保存，留空沿用当前 api_hash");
   assert.strictEqual(harness.elements.get("proxy").placeholder, "已保存含凭据代理，留空沿用");
@@ -665,18 +665,77 @@ async function testLoginConfigPayloadSaveAndStartBoundaries() {
   assert.strictEqual(harness.calls.fetch[0].path, "/api/login/start");
   assert.strictEqual(harness.calls.fetch[0].options.method, "POST");
   assert.deepStrictEqual(JSON.parse(harness.calls.fetch[0].options.body), {
-    api_id: 123456,
-    api_hash: "abcdefabcdefabcdefabcdefabcdefab",
-    phone: "+8613812345678",
-    proxy: "socks5://127.0.0.1",
+    api_id: 123,
+    phone: "+8613800000000",
     session_type: "file",
-    session_file: "custom.session",
-    string_session: "1A",
-    download_threads: 32,
-    cache_limit_mb: 512,
+    download_threads: 16,
+    cache_limit_mb: 1024,
   });
   assert(!JSON.parse(harness.calls.fetch[0].options.body).web_token);
   assert(harness.calls.toast.includes("验证码已发送"));
+}
+
+async function testLoginActionsAreSerializedDuringConfigRefresh() {
+  let releaseSave;
+  let configPosts = 0;
+  let configGets = 0;
+  const harness = createHarness({
+    routes: {
+      "/api/config": (_path, options = {}) => {
+        if (options.method === "POST") {
+          configPosts += 1;
+          return new Promise((resolve) => { releaseSave = () => resolve({
+            api_id: 321,
+            api_hash_saved: false,
+            phone: "+8613900000000",
+            proxy: "",
+            proxy_redacted: false,
+            session_type: "file",
+            session_file_saved: false,
+            string_session_saved: false,
+            download_threads: 4,
+            cache_limit_mb: 1024,
+            web_token_saved: false,
+          }); });
+        }
+        configGets += 1;
+        return {
+          api_id: 321,
+          api_hash_saved: false,
+          phone: "+8613900000000",
+          proxy: "",
+          proxy_redacted: false,
+          session_type: "file",
+          session_file_saved: false,
+          string_session_saved: false,
+          download_threads: 4,
+          cache_limit_mb: 1024,
+          web_token_saved: false,
+        };
+      },
+      "/api/login/start": { message: "不应发送验证码" },
+      "/api/status": { connected: true, authorized: false },
+    },
+  });
+
+  harness.elements.get("api_id").value = "321";
+  harness.elements.get("phone").value = "+8613900000000";
+
+  const saveAction = harness.context.saveLoginConfig();
+  await Promise.resolve();
+  await harness.context.startLogin();
+
+  assert.strictEqual(configPosts, 1);
+  assert.strictEqual(configGets, 0);
+  assert(!harness.calls.fetch.some((call) => call.path === "/api/login/start"));
+  assert(harness.calls.toast.includes("配置正在保存，请稍候"));
+
+  releaseSave();
+  await saveAction;
+
+  assert.strictEqual(configGets, 1);
+  assert.strictEqual(harness.elements.get("api_id").value, "321");
+  assert(harness.calls.toast.includes("配置已保存"));
 }
 
 async function testLoginConfigErrorsSurfaceBackendCopy() {
@@ -1004,6 +1063,7 @@ const TEST_GROUPS = [
       testLoadLoginPageUsesRedactedConfigPlaceholders,
       testLoadLoginPageUsesUnsavedConfigGuidance,
       testLoginConfigPayloadSaveAndStartBoundaries,
+      testLoginActionsAreSerializedDuringConfigRefresh,
       testLoginConfigErrorsSurfaceBackendCopy,
       testRefreshStatusUpdatesLiveRegionBusyState,
     ],

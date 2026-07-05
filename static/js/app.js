@@ -16,6 +16,7 @@ const SHOW_META = false;
 let pendingConfirm = null;
 let confirmDialogBound = false;
 let confirmLastFocus = null;
+let loginActionBusyMessage = "";
 
 const THUMB_CACHE = new Map(); // key: `${peer}:${msgId}` -> url|null
 const URL_TOKEN = new URLSearchParams(location.search).get("token") || "";
@@ -156,6 +157,18 @@ function setAriaBusy(target, busy){
   const el = typeof target === "string" ? $(target) : target;
   if (el && typeof el.setAttribute === "function") el.setAttribute("aria-busy", busy ? "true" : "false");
 }
+async function withLoginAction(busyMessage, action){
+  if (loginActionBusyMessage) {
+    toast(loginActionBusyMessage);
+    return null;
+  }
+  loginActionBusyMessage = busyMessage;
+  try {
+    return await action();
+  } finally {
+    loginActionBusyMessage = "";
+  }
+}
 function setDiagnosticsState(state){
   const summary = $("diagnosticsSummary");
   if (summary) {
@@ -276,7 +289,7 @@ async function refreshStatus(){
 async function loadLoginPage(){
   try{
     const cfg = await api("/api/config");
-    $("api_id").value = cfg.api_id || "";
+    $("api_id").value = cfg.api_id ? String(cfg.api_id) : "";
     $("api_hash").value = "";
     $("api_hash").placeholder = cfg.api_hash_saved ? "已保存，留空沿用当前 api_hash" : "32 位十六进制字符串";
     $("phone").value = cfg.phone || "";
@@ -287,8 +300,8 @@ async function loadLoginPage(){
     $("session_file").placeholder = cfg.session_file_saved ? "已保存，留空沿用当前 .session 文件" : "telegram.session";
     $("string_session").value = "";
     $("string_session").placeholder = cfg.string_session_saved ? "已保存，留空沿用当前 StringSession" : "导入或登录后自动保存";
-    $("download_threads").value = cfg.download_threads || 16;
-    $("cache_limit_mb").value = cfg.cache_limit_mb || 1024;
+    $("download_threads").value = String(cfg.download_threads || 16);
+    $("cache_limit_mb").value = String(cfg.cache_limit_mb || 1024);
     $("web_token").value = "";
     $("web_token").placeholder = cfg.web_token_saved ? "已保存，留空不修改 Web Token" : "可选，8-256 字符，不能含空白";
   } catch(e){ toast(e.message); }
@@ -317,38 +330,48 @@ function loginConfigPayload(includeWebToken = false){
   return payload;
 }
 async function saveLoginConfig(){
-  try{
-    await api("/api/config", { method:"POST", body: JSON.stringify(loginConfigPayload(true)) });
-    toast("配置已保存");
-    loadLoginPage();
-  } catch(e){ toast(e.message); }
+  return withLoginAction("配置正在保存，请稍候", async () => {
+    try{
+      await api("/api/config", { method:"POST", body: JSON.stringify(loginConfigPayload(true)) });
+      await loadLoginPage();
+      toast("配置已保存");
+    } catch(e){ toast(e.message); }
+  });
 }
 async function startLogin(){
-  try{
-    const d = await api("/api/login/start", {
-      method:"POST",
-      body: JSON.stringify(loginConfigPayload(false))
-    });
-    toast(d.message || "已处理"); refreshStatus();
-  } catch(e){ toast(e.message); }
+  return withLoginAction("验证码正在发送，请稍候", async () => {
+    try{
+      const d = await api("/api/login/start", {
+        method:"POST",
+        body: JSON.stringify(loginConfigPayload(false))
+      });
+      toast(d.message || "已处理"); refreshStatus();
+    } catch(e){ toast(e.message); }
+  });
 }
 async function submitCode(){
-  const code = prompt("请输入验证码"); if (!code) return;
-  try{
-    const d = await api("/api/login/code", { method:"POST", body: JSON.stringify({ code }) });
-    toast(d.need_password ? "需要两步验证密码" : "登录成功");
-    refreshStatus();
-  } catch(e){ toast(e.message); }
+  return withLoginAction("验证码正在提交，请稍候", async () => {
+    const code = prompt("请输入验证码"); if (!code) return;
+    try{
+      const d = await api("/api/login/code", { method:"POST", body: JSON.stringify({ code }) });
+      toast(d.need_password ? "需要两步验证密码" : "登录成功");
+      refreshStatus();
+    } catch(e){ toast(e.message); }
+  });
 }
 async function submitPassword(){
-  const password = prompt("请输入两步验证密码"); if (!password) return;
-  try{ await api("/api/login/password", { method:"POST", body: JSON.stringify({ password }) }); toast("登录成功"); refreshStatus(); }
-  catch(e){ toast(e.message); }
+  return withLoginAction("2FA 正在提交，请稍候", async () => {
+    const password = prompt("请输入两步验证密码"); if (!password) return;
+    try{ await api("/api/login/password", { method:"POST", body: JSON.stringify({ password }) }); toast("登录成功"); refreshStatus(); }
+    catch(e){ toast(e.message); }
+  });
 }
 async function logoutTelegram(){
-  if (!(await confirmSensitive("确认退出 Telegram 登录？这会断开当前账号会话。"))) return;
-  try{ await api("/api/logout", { method:"POST", body:"{}" }); toast("已退出登录"); refreshStatus(); }
-  catch(e){ toast(e.message); }
+  return withLoginAction("正在处理退出登录，请稍候", async () => {
+    if (!(await confirmSensitive("确认退出 Telegram 登录？这会断开当前账号会话。"))) return;
+    try{ await api("/api/logout", { method:"POST", body:"{}" }); toast("已退出登录"); refreshStatus(); }
+    catch(e){ toast(e.message); }
+  });
 }
 async function importStringSession(){
   const value = $("string_session")?.value.trim();
