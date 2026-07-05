@@ -1009,6 +1009,72 @@ async function testDownloadTasksRenderControlsAndErrors() {
   expectHtmlIncludes(failing, "downloadTaskList", ["任务接口失败"]);
 }
 
+async function testTaskDeleteWaitsForInFlightPollBeforeRefreshing() {
+  let releaseFirstTasks;
+  let taskRequestCount = 0;
+  const harness = createHarness({
+    routes: {
+      "/api/tasks": () => {
+        taskRequestCount += 1;
+        if (taskRequestCount === 1) {
+          return new Promise((resolve) => {
+            releaseFirstTasks = () => resolve([
+              { id: "task-1", kind: "download_media", status: "running", progress: 50, downloaded_text: "1 MB" },
+            ]);
+          });
+        }
+        return [];
+      },
+      "/api/task/task-1": { deleted: true },
+      "/api/download-files": { items: [], total: 0, has_more: false },
+    },
+  });
+
+  const pollAction = harness.context.loadDownloadTasks();
+  await Promise.resolve();
+  const deleteAction = harness.context.taskDelete("task-1", "running");
+  clickElement(harness, "confirmOk");
+  await Promise.resolve();
+
+  releaseFirstTasks();
+  await Promise.all([pollAction, deleteAction]);
+
+  assert.strictEqual(taskRequestCount, 2);
+  assert.deepStrictEqual(harness.calls.fetch.map((call) => call.path), [
+    "/api/tasks",
+    "/api/task/task-1",
+    "/api/tasks",
+    "/api/download-files?limit=30&offset=0",
+  ]);
+  expectHtmlIncludes(harness, "downloadTaskList", ["暂无任务"]);
+  assert(!htmlOf(harness, "downloadTaskList").includes("运行中"));
+}
+
+async function testTaskActionsAreSerializedByTaskId() {
+  let releaseDelete;
+  const harness = createHarness({
+    routes: {
+      "/api/task/task-1": () => new Promise((resolve) => {
+        releaseDelete = () => resolve({ deleted: true });
+      }),
+      "/api/tasks": [],
+      "/api/download-files": { items: [], total: 0, has_more: false },
+    },
+  });
+
+  const firstAction = harness.context.taskDelete("task-1", "running");
+  clickElement(harness, "confirmOk");
+  await Promise.resolve();
+  await Promise.resolve();
+  await harness.context.taskDelete("task-1", "running");
+
+  assert(harness.calls.toast.includes("任务正在处理，请稍候"));
+  assert.strictEqual(harness.calls.fetch.filter((call) => call.path === "/api/task/task-1").length, 1);
+
+  releaseDelete();
+  await firstAction;
+}
+
 async function testDownloadFilesPaginationAndRendering() {
   const harness = createHarness({
     routes: {
@@ -1047,6 +1113,80 @@ async function testDownloadFilesPaginationAndRendering() {
   expectHtmlIncludes(harness, "downloadFileList", ['role="listitem"', 'aria-label="打开 doc.txt"', "doc.txt"]);
   assert.strictEqual(textOf(harness, "downloadFileStatus"), "已显示 3 / 3");
   assert.strictEqual(harness.elements.get("downloadFileMore").style.display, "none");
+}
+
+async function testDownloadFilesDuplicateLoadMoreShowsBusyState() {
+  let releaseNextPage;
+  const harness = createHarness({
+    routes: {
+      "/api/download-files": (path) => {
+        if (path.includes("offset=0")) {
+          return {
+            items: [{ name: "first.bin", kind: "download", url: "/download-file/first.bin", size: 1 }],
+            total: 2,
+            has_more: true,
+          };
+        }
+        return new Promise((resolve) => {
+          releaseNextPage = () => resolve({
+            items: [{ name: "second.bin", kind: "download", url: "/download-file/second.bin", size: 2 }],
+            total: 2,
+            has_more: false,
+          });
+        });
+      },
+    },
+  });
+
+  await harness.context.loadDownloadFiles(true);
+  const nextAction = harness.context.loadDownloadFiles(false);
+  await Promise.resolve();
+
+  assert.strictEqual(harness.elements.get("downloadFileMore").getAttribute("aria-disabled"), "true");
+  assert.strictEqual(harness.elements.get("downloadFileMore").textContent, "加载中...");
+
+  const duplicateAction = harness.context.loadDownloadFiles(false);
+  await Promise.resolve();
+
+  assert.strictEqual(harness.calls.fetch.length, 2);
+  assert(harness.calls.toast.includes("文件列表正在加载，请稍候"));
+
+  releaseNextPage();
+  await Promise.all([nextAction, duplicateAction]);
+
+  expectHtmlIncludes(harness, "downloadFileList", ["first.bin", "second.bin"]);
+  assert.strictEqual(harness.elements.get("downloadFileMore").getAttribute("aria-disabled"), "false");
+  assert.strictEqual(harness.elements.get("downloadFileMore").style.display, "none");
+}
+
+async function testDownloadFilesResetFailureClearsStaleStatus() {
+  let requestCount = 0;
+  const harness = createHarness({
+    routes: {
+      "/api/download-files": () => {
+        requestCount += 1;
+        if (requestCount === 1) {
+          return {
+            items: [{ name: "old.bin", kind: "download", url: "/download-file/old.bin", size: 1 }],
+            total: 1,
+            has_more: false,
+          };
+        }
+        return apiFailure("刷新文件失败", 500);
+      },
+    },
+  });
+
+  await harness.context.loadDownloadFiles(true);
+  assert.strictEqual(textOf(harness, "downloadFileStatus"), "已显示 1 / 1");
+
+  await harness.context.loadDownloadFiles(true);
+
+  assert.strictEqual(textOf(harness, "downloadFileStatus"), "");
+  expectHtmlIncludes(harness, "downloadFileList", ["刷新文件失败"]);
+  assert.strictEqual(harness.elements.get("downloadFileMore").style.display, "none");
+  assert.strictEqual(harness.elements.get("downloadFileList").getAttribute("aria-busy"), "false");
+  assert.strictEqual(harness.elements.get("downloadFileStatus").getAttribute("aria-busy"), "false");
 }
 
 async function testDownloadFilesErrorShowsToastAfterExistingPage() {
@@ -1232,7 +1372,11 @@ const TEST_GROUPS = [
     name: "downloads",
     tests: [
       testDownloadTasksRenderControlsAndErrors,
+      testTaskDeleteWaitsForInFlightPollBeforeRefreshing,
+      testTaskActionsAreSerializedByTaskId,
       testDownloadFilesPaginationAndRendering,
+      testDownloadFilesDuplicateLoadMoreShowsBusyState,
+      testDownloadFilesResetFailureClearsStaleStatus,
       testDownloadFilesErrorShowsToastAfterExistingPage,
     ],
   },

@@ -5,6 +5,11 @@ let downloadsTimer = null;
 let downloadFilesOffset = 0;
 let downloadFilesHasMore = false;
 let downloadFilesLoading = false;
+let downloadFilesCurrentPromise = null;
+let downloadTasksLoading = false;
+let downloadTasksCurrentPromise = null;
+let downloadTaskActionVersion = 0;
+const downloadTaskActionBusyIds = new Set();
 const DOWNLOAD_FILE_LIMIT = 30;
 
 let GALLERY_ITEMS = [];
@@ -911,16 +916,55 @@ async function downloadMedia(msgId){
     toast("下载任务已创建，可在下载页查看进度");
   } catch(e){ toast(e.message); }
 }
-async function taskPause(id){ try{ await api(`/api/task/${id}/pause`, { method:"POST", body:"{}" }); await loadDownloadTasks(); } catch(e){ toast(e.message); } }
-async function taskResume(id){ try{ await api(`/api/task/${id}/resume`, { method:"POST", body:"{}" }); await loadDownloadTasks(); } catch(e){ toast(e.message); } }
+async function waitForDownloadTasksIdle(){
+  if (downloadTasksCurrentPromise) await downloadTasksCurrentPromise.catch(() => {});
+}
+async function waitForDownloadFilesIdle(){
+  if (downloadFilesCurrentPromise) await downloadFilesCurrentPromise.catch(() => {});
+}
+async function refreshDownloadsAfterTaskAction(refreshFiles = false){
+  await waitForDownloadTasksIdle();
+  if (refreshFiles) await waitForDownloadFilesIdle();
+  const refreshes = [loadDownloadTasks(true)];
+  if (refreshFiles) refreshes.push(loadDownloadFiles(true));
+  await Promise.allSettled(refreshes);
+}
+async function withDownloadTaskAction(id, busyMessage, action){
+  if (downloadTaskActionBusyIds.has(id)) {
+    toast(busyMessage);
+    return null;
+  }
+  downloadTaskActionBusyIds.add(id);
+  downloadTaskActionVersion += 1;
+  try {
+    return await action();
+  } finally {
+    downloadTaskActionVersion += 1;
+    downloadTaskActionBusyIds.delete(id);
+  }
+}
+async function taskPause(id){
+  return withDownloadTaskAction(id, "任务正在处理，请稍候", async () => {
+    try{ await api(`/api/task/${id}/pause`, { method:"POST", body:"{}" }); await refreshDownloadsAfterTaskAction(); }
+    catch(e){ toast(e.message); }
+  });
+}
+async function taskResume(id){
+  return withDownloadTaskAction(id, "任务正在处理，请稍候", async () => {
+    try{ await api(`/api/task/${id}/resume`, { method:"POST", body:"{}" }); await refreshDownloadsAfterTaskAction(); }
+    catch(e){ toast(e.message); }
+  });
+}
 async function taskDelete(id, status = ""){
-  const active = ["queued", "running", "paused"].includes(status);
-  const text = active ? "确认取消这个下载/预览任务？任务记录会移除，并向后台任务发送取消信号。" : "确认移除这条终态任务记录？已下载文件不会删除。";
-  if (!(await confirmSensitive(text))) return;
-  try{
-    await api(`/api/task/${id}`, { method:"DELETE" });
-    await Promise.allSettled([loadDownloadTasks(), loadDownloadFiles(true)]);
-  } catch(e){ toast(e.message); }
+  return withDownloadTaskAction(id, "任务正在处理，请稍候", async () => {
+    const active = ["queued", "running", "paused"].includes(status);
+    const text = active ? "确认取消这个下载/预览任务？任务记录会移除，并向后台任务发送取消信号。" : "确认移除这条终态任务记录？已下载文件不会删除。";
+    if (!(await confirmSensitive(text))) return;
+    try{
+      await api(`/api/task/${id}`, { method:"DELETE" });
+      await refreshDownloadsAfterTaskAction(true);
+    } catch(e){ toast(e.message); }
+  });
 }
 
 function taskKindText(kind){
@@ -945,24 +989,39 @@ async function initDownloadsPage(){
   downloadsTimer = setInterval(loadDownloadTasks, 1200);
 }
 async function loadDownloadsPage(){ await Promise.allSettled([loadDownloadTasks(), loadDownloadFiles(true)]); }
-async function loadDownloadTasks(){
+async function loadDownloadTasks(force = false){
   const box = $("downloadTaskList"); if (!box) return;
-  setAriaBusy(box, true);
-  try{
-    const list = await api("/api/tasks");
-    if (!list.length) {
-      box.innerHTML = `<div class="empty" role="listitem">暂无任务</div>`;
-      return;
+  if (downloadTasksLoading) return downloadTasksCurrentPromise;
+  if (downloadTaskActionBusyIds.size && !force) return null;
+  const startedVersion = downloadTaskActionVersion;
+  downloadTasksLoading = true;
+  const current = (async () => {
+    setAriaBusy(box, true);
+    try{
+      const list = await api("/api/tasks");
+      if (!force && startedVersion !== downloadTaskActionVersion) return;
+      if (!list.length) {
+        box.innerHTML = `<div class="empty" role="listitem">暂无任务</div>`;
+        return;
+      }
+      box.innerHTML = list.map(t => {
+        const controls = t.status === "running" ? `<button class="small-btn gray" type="button" onclick="taskPause('${t.id}')">暂停</button>` : t.status === "paused" ? `<button class="small-btn" type="button" onclick="taskResume('${t.id}')">恢复</button>` : "";
+        const deleteText = ["queued", "running", "paused"].includes(t.status) ? "取消任务" : "移除记录";
+        return `<div class="task-card" role="listitem"><div class="task-head"><div><div class="task-title">${escapeHtml(taskKindText(t.kind))} · ${escapeHtml(taskStatusText(t.status))}</div><div class="task-meta">${escapeHtml(t.downloaded_text || "0 B")}${t.total_text ? " / " + escapeHtml(t.total_text) : ""}${t.speed_text ? " · " + escapeHtml(t.speed_text) : ""}</div></div><b>${t.progress || 0}%</b></div><div class="progress-line"><div style="width:${t.progress || 0}%"></div></div><div class="actions" style="margin-top:8px">${controls}<button class="small-btn danger" type="button" onclick="taskDelete('${t.id}', '${escapeHtml(t.status)}')">${deleteText}</button></div></div>`;
+      }).join("");
+    } catch(e){
+      if (!force && startedVersion !== downloadTaskActionVersion) return;
+      box.innerHTML = `<div class="empty" role="listitem">${escapeHtml(e.message)}</div>`;
+    } finally {
+      setAriaBusy(box, false);
     }
-    box.innerHTML = list.map(t => {
-      const controls = t.status === "running" ? `<button class="small-btn gray" type="button" onclick="taskPause('${t.id}')">暂停</button>` : t.status === "paused" ? `<button class="small-btn" type="button" onclick="taskResume('${t.id}')">恢复</button>` : "";
-      const deleteText = ["queued", "running", "paused"].includes(t.status) ? "取消任务" : "移除记录";
-      return `<div class="task-card" role="listitem"><div class="task-head"><div><div class="task-title">${escapeHtml(taskKindText(t.kind))} · ${escapeHtml(taskStatusText(t.status))}</div><div class="task-meta">${escapeHtml(t.downloaded_text || "0 B")}${t.total_text ? " / " + escapeHtml(t.total_text) : ""}${t.speed_text ? " · " + escapeHtml(t.speed_text) : ""}</div></div><b>${t.progress || 0}%</b></div><div class="progress-line"><div style="width:${t.progress || 0}%"></div></div><div class="actions" style="margin-top:8px">${controls}<button class="small-btn danger" type="button" onclick="taskDelete('${t.id}', '${escapeHtml(t.status)}')">${deleteText}</button></div></div>`;
-    }).join("");
-  } catch(e){
-    box.innerHTML = `<div class="empty" role="listitem">${escapeHtml(e.message)}</div>`;
+  })();
+  downloadTasksCurrentPromise = current;
+  try {
+    return await current;
   } finally {
-    setAriaBusy(box, false);
+    if (downloadTasksCurrentPromise === current) downloadTasksCurrentPromise = null;
+    downloadTasksLoading = false;
   }
 }
 function renderDownloadFile(f){
@@ -980,41 +1039,50 @@ function updateDownloadFilePager(){
 async function loadDownloadFiles(reset = false){
   const box = $("downloadFileList"); if (!box) return;
   const status = $("downloadFileStatus");
-  if (downloadFilesLoading) return;
+  if (downloadFilesLoading) {
+    toast("文件列表正在加载，请稍候");
+    return downloadFilesCurrentPromise;
+  }
   if (reset) {
     downloadFilesOffset = 0;
     downloadFilesHasMore = false;
+    if (status) status.textContent = "";
     updateDownloadFilePager();
   }
   downloadFilesLoading = true;
-  setAriaBusy(box, true);
-  setAriaBusy(status, true);
-  updateDownloadFilePager();
-  try{
-    const offset = reset ? 0 : downloadFilesOffset;
-    const data = await api(`/api/download-files?limit=${DOWNLOAD_FILE_LIMIT}&offset=${offset}`);
-    const list = Array.isArray(data) ? data : (data.items || []);
-    const total = Array.isArray(data) ? list.length : Number(data.total || 0);
-    if (reset) box.innerHTML = "";
-    if (!list.length && offset === 0) {
-      box.innerHTML = `<div class="empty" role="listitem">暂无文件</div>`;
-    } else if (list.length) {
-      const html = list.map(renderDownloadFile).join("");
-      if (reset) box.innerHTML = html;
-      else box.insertAdjacentHTML("beforeend", html);
-    }
-    downloadFilesOffset = offset + list.length;
-    downloadFilesHasMore = Array.isArray(data) ? false : Boolean(data.has_more);
-    if (status) status.textContent = total ? `已显示 ${Math.min(downloadFilesOffset, total)} / ${total}` : "";
-  } catch(e){
-    if (reset || downloadFilesOffset === 0) box.innerHTML = `<div class="empty" role="listitem">${escapeHtml(e.message)}</div>`;
-    else toast(e.message);
-  } finally {
-    downloadFilesLoading = false;
-    setAriaBusy(box, false);
-    setAriaBusy(status, false);
+  const current = (async () => {
+    setAriaBusy(box, true);
+    setAriaBusy(status, true);
     updateDownloadFilePager();
-  }
+    try{
+      const offset = reset ? 0 : downloadFilesOffset;
+      const data = await api(`/api/download-files?limit=${DOWNLOAD_FILE_LIMIT}&offset=${offset}`);
+      const list = Array.isArray(data) ? data : (data.items || []);
+      const total = Array.isArray(data) ? list.length : Number(data.total || 0);
+      if (reset) box.innerHTML = "";
+      if (!list.length && offset === 0) {
+        box.innerHTML = `<div class="empty" role="listitem">暂无文件</div>`;
+      } else if (list.length) {
+        const html = list.map(renderDownloadFile).join("");
+        if (reset) box.innerHTML = html;
+        else box.insertAdjacentHTML("beforeend", html);
+      }
+      downloadFilesOffset = offset + list.length;
+      downloadFilesHasMore = Array.isArray(data) ? false : Boolean(data.has_more);
+      if (status) status.textContent = total ? `已显示 ${Math.min(downloadFilesOffset, total)} / ${total}` : "";
+    } catch(e){
+      if (reset || downloadFilesOffset === 0) box.innerHTML = `<div class="empty" role="listitem">${escapeHtml(e.message)}</div>`;
+      else toast(e.message);
+    } finally {
+      downloadFilesLoading = false;
+      if (downloadFilesCurrentPromise === current) downloadFilesCurrentPromise = null;
+      setAriaBusy(box, false);
+      setAriaBusy(status, false);
+      updateDownloadFilePager();
+    }
+  })();
+  downloadFilesCurrentPromise = current;
+  return await current;
 }
 
 refreshStatus();
